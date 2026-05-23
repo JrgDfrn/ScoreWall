@@ -1,0 +1,6 @@
+{
+  "name": "Sport Team Management & Tactical Whiteboard",
+  "description": "A modern platform for managing football and water polo teams, scheduling matches, tracking players with scalable stats, and creating tactics on an interactive board.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
