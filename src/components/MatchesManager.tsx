@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Team, Player, Match } from '../types';
 import { DB } from '../db';
-import { Calendar, MapPin, Trophy, ShieldAlert, Plus, CheckCircle, Clock, Trash2 } from 'lucide-react';
+import { Calendar, MapPin, Trophy, ShieldAlert, Plus, CheckCircle, Clock, Trash2, Users, UserPlus, Check } from 'lucide-react';
 
 interface MatchesManagerProps {
   team: Team;
@@ -23,9 +23,11 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
   const [time, setTime] = useState('');
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
+  const [selectedSquad, setSelectedSquad] = useState<string[]>([]); // New match squad
 
-  // Complete Match result state
+  // UI States
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [editingSquadId, setEditingSquadId] = useState<string | null>(null);
   const [scoreFor, setScoreFor] = useState(0);
   const [scoreAgainst, setScoreAgainst] = useState(0);
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]); // player IDs
@@ -35,8 +37,12 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
       setLoading(true);
       const list = await DB.matches.list(team.id);
       
-      // Sort: Completed matches first or newest
-      const sorted = list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Sort: Future matches first, then completed by date
+      const sorted = list.sort((a, b) => {
+        if (a.status === 'future' && b.status === 'completed') return -1;
+        if (a.status === 'completed' && b.status === 'future') return 1;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
       setMatches(sorted);
 
       const roster = await DB.players.list(team.id);
@@ -66,6 +72,7 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
         location: location.trim() || 'Campo Principal',
         status: 'future',
         notes: notes.trim(),
+        callupIds: selectedSquad,
       };
 
       await DB.matches.save(newMatch);
@@ -76,10 +83,25 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
       setTime('');
       setLocation('');
       setNotes('');
+      setSelectedSquad([]);
 
       fetchMatchesAndRoster();
     } catch (e) {
       console.error('Error scheduling match:', e);
+    }
+  };
+
+  const handleUpdateSquad = async (match: Match, newSquad: string[]) => {
+    try {
+      const updatedMatch: Match = {
+        ...match,
+        callupIds: newSquad
+      };
+      await DB.matches.save(updatedMatch);
+      setEditingSquadId(null);
+      fetchMatchesAndRoster();
+    } catch (e) {
+      console.error('Failed to update squad:', e);
     }
   };
 
@@ -140,6 +162,14 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
     );
   };
 
+  const toggleSquadSelection = (playerId: string) => {
+    setSelectedSquad(prev => 
+      prev.includes(playerId)
+        ? prev.filter(id => id !== playerId)
+        : [...prev, playerId]
+    );
+  };
+
   return (
     <div id="matches-manager" className="grid grid-cols-1 lg:grid-cols-4 gap-6 p-4 text-slate-100 font-sans">
       
@@ -183,6 +213,40 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                   onChange={(e) => setTime(e.target.value)}
                   className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-300 focus:border-indigo-500 outline-none"
                 />
+              </div>
+            </div>
+
+            {/* CONVOCATORIA (SQUAD SELECTION) FOR NEW MATCH */}
+            <div className="space-y-2">
+              <label className="block text-[10px] text-slate-500 mb-1.5 uppercase font-bold flex items-center justify-between">
+                <span>Convocatoria</span>
+                {selectedSquad.length > 0 && (
+                  <span className="text-indigo-400 font-black">{selectedSquad.length} Jugadores</span>
+                )}
+              </label>
+              <div className="max-h-24 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+                {players.length === 0 ? (
+                  <p className="text-[10px] text-slate-600 italic px-1">Registra jugadores para convocarlos.</p>
+                ) : (
+                  players.map(p => {
+                    const isSelected = selectedSquad.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => toggleSquadSelection(p.id)}
+                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-[11px] transition-all ${
+                          isSelected 
+                            ? 'bg-indigo-600/10 border-indigo-500/30 text-indigo-400' 
+                            : 'bg-[#0b0e14] border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="truncate pr-2">#{p.number} {p.name}</span>
+                        {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -237,6 +301,8 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
           <div className="space-y-4">
             {matches.map((match) => {
               const isCompeted = match.status === 'completed';
+              const isEditingSquad = editingSquadId === match.id;
+              
               return (
                 <div
                   key={match.id}
@@ -275,21 +341,85 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                       </div>
                     </div>
 
-                    {/* Delete Action */}
-                    <button
-                      onClick={() => handleDeleteMatch(match.id)}
-                      className="p-1 h-7.5 w-7.5 bg-[#0b0e14] hover:bg-red-950/20 text-slate-500 hover:text-red-450 border border-slate-800 hover:border-slate-700 rounded-lg flex items-center justify-center transition cursor-pointer"
-                      title="Borrar partido del calendario"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                       {/* Squad management button */}
+                      {!isCompeted && !isEditingSquad && (
+                        <button
+                          onClick={() => {
+                            setSelectedSquad(match.callupIds || []);
+                            setEditingSquadId(match.id);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b0e14] border border-slate-800 text-slate-400 hover:text-indigo-400 hover:border-indigo-500/30 transition text-[10px] font-bold uppercase tracking-tight"
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          <span>Convocatoria ({match.callupIds?.length || 0})</span>
+                        </button>
+                      )}
+
+                      {/* Delete Action */}
+                      <button
+                        onClick={() => handleDeleteMatch(match.id)}
+                        className="p-1 h-7.5 w-7.5 bg-[#0b0e14] hover:bg-red-950/20 text-slate-500 hover:text-red-450 border border-slate-800 hover:border-slate-700 rounded-lg flex items-center justify-center transition cursor-pointer"
+                        title="Borrar partido del calendario"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* SQUAD EDITING DRAWER */}
+                  {isEditingSquad && (
+                    <div className="bg-[#0b0e14]/90 border border-indigo-500/20 rounded-xl p-4 mb-4 animate-fade-in space-y-3">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-indigo-400" />
+                          <span className="text-[11px] font-black uppercase text-slate-200">Gestionar Convocatoria</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">{selectedSquad.length} / {players.length}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar scroll-p-2">
+                        {players.map(p => {
+                          const isSelected = selectedSquad.includes(p.id);
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => toggleSquadSelection(p.id)}
+                              className={`flex items-center gap-2 p-2 rounded-xl border text-[10px] transition-all ${
+                                isSelected 
+                                  ? 'bg-indigo-600/10 border-indigo-500/40 text-indigo-300' 
+                                  : 'bg-[#161b26] border-slate-800 text-slate-500 hover:border-slate-700'
+                              }`}
+                            >
+                               <div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'bg-slate-700'}`} />
+                               <span className="truncate">#{p.number} {p.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex gap-2 justify-end pt-3 border-t border-white/5">
+                        <button
+                          onClick={() => setEditingSquadId(null)}
+                          className="px-4 py-1.5 rounded-lg bg-[#161b26] text-slate-400 hover:text-white text-[10px] font-bold uppercase transition"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => handleUpdateSquad(match, selectedSquad)}
+                          className="px-6 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black uppercase shadow-lg shadow-indigo-900/40 transition"
+                        >
+                          Confirmar Lista
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Operational result details or scoring dialog */}
                   {isCompeted ? (
                     // Display final static scoreline!
                     <div className="bg-[#0b0e14]/60 p-4 border border-slate-850 rounded-xl flex items-center justify-between gap-4">
-                      <div className="text-center font-mono py-1.5 px-4 bg-[#0b0e14] border border-slate-800 rounded-xl shrink-0">
+                      <div className="text-center font-mono py-1.5 px-4 bg-[#0b0e14] border border-slate-800 rounded-xl shrink-0 shadow-inner">
                         <span className="block text-[8px] uppercase tracking-widest text-[#10b981] font-extrabold mb-1">SCORE FINAL</span>
                         <div className="flex items-center gap-2 justify-center">
                           <span className="text-xl font-black text-indigo-400">{match.goalsFor}</span>
@@ -298,10 +428,32 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                         </div>
                       </div>
 
-                      <div className="text-left w-full">
+                      <div className="text-left w-full space-y-3">
+                         {/* Show squad if registered */}
+                        {match.callupIds && match.callupIds.length > 0 && (
+                          <div className="border-b border-slate-800/50 pb-2">
+                             <span className="text-[9px] font-black tracking-widest text-slate-500 uppercase block flex items-center gap-1.5 mb-1.5">
+                               <Users className="w-3 h-3" /> Convocados:
+                             </span>
+                             <div className="flex flex-wrap gap-1">
+                               {match.callupIds.map(id => {
+                                 const p = players.find(p => p.id === id);
+                                 if (!p) return null;
+                                 return (
+                                   <span key={id} className="text-[10px] text-slate-400 bg-slate-800/30 px-1.5 py-0.5 rounded">
+                                     {p.name}
+                                   </span>
+                                 );
+                               })}
+                             </div>
+                          </div>
+                        )}
+
                         {match.scorers && match.scorers.length > 0 ? (
                           <div className="space-y-1">
-                            <span className="text-[9px] font-black tracking-widest text-emerald-400 uppercase block">⚽ Goleadores del equipo:</span>
+                            <span className="text-[9px] font-black tracking-widest text-emerald-400 uppercase block flex items-center gap-1.5">
+                              <Trophy className="w-3 h-3" /> Goleadores del equipo:
+                            </span>
                             <p className="text-xs text-slate-300 font-medium leading-relaxed">
                               {match.scorers.join(', ')}
                             </p>
@@ -318,7 +470,7 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                     </div>
                   ) : completingId === match.id ? (
                     // In-card collapsible result logger drawer
-                    <div className="bg-[#0b0e14]/90 border border-slate-800 rounded-xl p-4 mt-2 space-y-4">
+                    <div className="bg-[#0b0e14]/90 border border-slate-800 rounded-xl p-4 mt-2 space-y-4 shadow-xl">
                       <div className="flex items-center gap-2 pb-2 border-b border-slate-850">
                         <CheckCircle className="w-4 h-4 text-emerald-400" />
                         <span className="text-xs font-black uppercase text-slate-300 tracking-wider">Registrar Resultados</span>
@@ -347,31 +499,34 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                         </div>
                       </div>
 
-                      {/* Scorer assigner: Click player to allocate goal points directly into roster profile! */}
-                      {players.length > 0 && (
-                        <div className="space-y-2">
-                          <span className="block text-[10px] text-slate-500 uppercase font-extrabold">¿Quién ha anotado los goles? (Presiona para sumar a su plantilla)</span>
-                          <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                            {players.map(p => {
-                              const isSelected = selectedScorers.includes(p.id);
-                              return (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => toggleScorerSelection(p.id)}
-                                  className={`text-2xs px-2.5 py-1.5 rounded-lg border font-semibold tracking-tight transition cursor-pointer ${
-                                    isSelected
-                                      ? 'bg-indigo-500/10 border-indigo-500/45 text-indigo-400'
-                                      : 'bg-[#161b26] border-slate-850 text-slate-400 hover:text-slate-200'
-                                  }`}
-                                >
-                                  {p.name} (#{p.number})
-                                </button>
-                              );
-                            })}
-                          </div>
+                      {/* Scorer assigner: Click player from CONVOCATORIA (SQUAD) to allocate goal points */}
+                      <div className="space-y-2">
+                        <span className="block text-[10px] text-slate-500 uppercase font-extrabold">¿Quién ha anotado los goles?</span>
+                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                          {(match.callupIds && match.callupIds.length > 0 ? match.callupIds : players.map(p => p.id)).map(id => {
+                            const p = players.find(p => p.id === id);
+                            if (!p) return null;
+                            const isSelected = selectedScorers.includes(p.id);
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => toggleScorerSelection(p.id)}
+                                className={`text-2xs px-2.5 py-1.5 rounded-lg border font-semibold tracking-tight transition cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-indigo-500/10 border-indigo-500/45 text-indigo-400'
+                                    : 'bg-[#161b26] border-slate-850 text-slate-400 hover:text-slate-200'
+                                }`}
+                              >
+                                {p.name} (#{p.number})
+                              </button>
+                            );
+                          })}
                         </div>
-                      )}
+                        {(!match.callupIds || match.callupIds.length === 0) && (
+                          <p className="text-[9px] text-slate-600 italic">* Mostrando todos los jugadores ya que no hay convocatoria fijada.</p>
+                        )}
+                      </div>
 
                       <div className="flex gap-2 justify-end pt-2 border-t border-slate-850">
                         <button
@@ -384,7 +539,7 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                         <button
                           type="button"
                           onClick={() => handleSaveResult(match)}
-                          className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-2xs font-semibold shadow cursor-pointer"
+                          className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-2xs font-semibold shadow shadow-indigo-900/40 cursor-pointer"
                         >
                           Guardar Marcador
                         </button>
@@ -393,9 +548,17 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
                   ) : (
                     // Default scheduling placeholder
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 bg-[#0b0e14]/40 p-3 rounded-xl border border-slate-850">
-                      <div className="flex gap-2 items-center text-xs">
-                        <Clock className="w-4 h-4 text-[#06b6d4]" />
-                        <span className="text-slate-400 font-medium">Partido programado y pendiente de jugar.</span>
+                       <div className="flex flex-col gap-1">
+                        <div className="flex gap-2 items-center text-xs">
+                          <Clock className="w-4 h-4 text-[#06b6d4]" />
+                          <span className="text-slate-400 font-medium">Partido programado.</span>
+                        </div>
+                        {match.callupIds && match.callupIds.length > 0 && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-indigo-400 ml-6">
+                            <Users className="w-3 h-3" />
+                            <span>{match.callupIds.length} jugadores en convocatoria</span>
+                          </div>
+                        )}
                       </div>
                       
                       <button

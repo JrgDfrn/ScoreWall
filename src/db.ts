@@ -4,7 +4,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Team, Player, Match, Tactic, SupabaseConfig, PlayerStats, CustomStatDefinition } from './types';
+import { Team, Player, Match, Tactic, SupabaseConfig, PlayerStats, CustomStatDefinition, Training, JoinRequest } from './types';
 
 // Helper for generating dynamic UUIDs
 function generateUUID(): string {
@@ -71,6 +71,8 @@ const LOCAL_STORAGE_KEYS = {
   PLAYERS: 'tt_local_players',
   MATCHES: 'tt_local_matches',
   TACTICS: 'tt_local_tactics',
+  TRAININGS: 'tt_local_trainings',
+  REQUESTS: 'tt_local_requests',
   USER: 'tt_local_auth_user',
 };
 
@@ -114,18 +116,37 @@ create table if not exists public.matches (
   goals_for integer,
   goals_against integer,
   scorers text[],
+  callup_ids text[],
   notes text
 );
 
 -- 4. Tabla de Pizarras/Tácticas (tactics)
-create table if not exists public.tactics (
+-- ... (existing docs)
+
+-- 5. Tabla de Entrenamientos (trainings)
+create table if not exists public.trainings (
   id uuid default gen_random_uuid() primary key,
   team_id uuid references public.teams(id) on delete cascade not null,
-  name text not null,
+  date text not null,
+  title text not null,
   description text,
-  sport text not null,
-  chips jsonb default '[]'::jsonb not null,
-  lines jsonb default '[]'::jsonb not null,
+  intensity text not null,
+  duration integer not null,
+  type text not null,
+  focus_items text[],
+  notes text,
+  status text not null,
+  votes jsonb default '{}'::jsonb
+);
+
+-- 6. Tabla de Solicitudes de Unión (join_requests)
+create table if not exists public.join_requests (
+  id uuid default gen_random_uuid() primary key,
+  user_id text not null,
+  user_email text not null,
+  team_id uuid references public.teams(id) on delete cascade not null,
+  player_name text not null,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -311,7 +332,8 @@ export function checkAndSeedLocalData(userId: string) {
           { id: 'l1', points: [{ x: 50, y: 48 }, { x: 50, y: 35 }], color: '#f59e0b', width: 3, style: 'arrow' },
           { id: 'l2', points: [{ x: 22, y: 25 }, { x: 42, y: 21 }], color: '#10b981', width: 2, style: 'dashed' }
         ],
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        type: 'tactic'
       },
       {
         id: 't2',
@@ -331,7 +353,8 @@ export function checkAndSeedLocalData(userId: string) {
         lines: [
           { id: 'l_wp1', points: [{ x: 75, y: 55 }, { x: 50, y: 40 }], color: '#ec4899', width: 3, style: 'arrow' }
         ],
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        type: 'tactic'
       }
     ];
 
@@ -526,6 +549,7 @@ export const DB = {
             return data.map((p: any) => ({
               id: p.id,
               teamId: p.team_id,
+              userId: p.user_id,
               name: p.name,
               number: p.number,
               position: p.position,
@@ -550,6 +574,7 @@ export const DB = {
           const dto = {
             id: player.id,
             team_id: player.teamId,
+            user_id: player.userId || null,
             name: player.name,
             number: player.number,
             position: player.position,
@@ -617,6 +642,7 @@ export const DB = {
               goalsFor: m.goals_for,
               goalsAgainst: m.goals_against,
               scorers: m.scorers || [],
+              callupIds: m.callup_ids || [],
               notes: m.notes,
             })) as Match[];
           }
@@ -643,6 +669,7 @@ export const DB = {
             goals_for: match.goalsFor !== undefined ? match.goalsFor : null,
             goals_against: match.goalsAgainst !== undefined ? match.goalsAgainst : null,
             scorers: match.scorers || null,
+            callup_ids: match.callupIds || null,
             notes: match.notes || null,
           };
           const { error } = await client.from('matches').upsert(dto);
@@ -702,6 +729,9 @@ export const DB = {
               chips: t.chips,
               lines: t.lines,
               createdAt: t.created_at,
+              type: t.type || 'tactic',
+              rating: t.rating,
+              categories: t.categories || [],
             })) as Tactic[];
           }
         }
@@ -724,6 +754,9 @@ export const DB = {
             sport: tactic.sport,
             chips: tactic.chips,
             lines: tactic.lines,
+            type: tactic.type,
+            rating: tactic.rating || null,
+            categories: tactic.categories || [],
           };
           const { error } = await client.from('tactics').upsert(dto);
           if (error) throw new Error(error.message);
@@ -758,4 +791,171 @@ export const DB = {
       setLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, allTactics);
     },
   },
+
+  trainings: {
+    async list(teamId: string): Promise<Training[]> {
+      await delay(200);
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data } = await client.from('trainings').select('*').eq('team_id', teamId);
+          if (data) return data.map(t => ({
+            id: t.id,
+            teamId: t.team_id,
+            date: t.date,
+            title: t.title,
+            description: t.description,
+            intensity: t.intensity,
+            duration: t.duration,
+            type: t.type,
+            focusItems: t.focus_items,
+            notes: t.notes,
+            status: t.status,
+            votes: t.votes || {}
+          })) as Training[];
+        }
+      }
+      return getLocalItem<Training[]>(LOCAL_STORAGE_KEYS.TRAININGS, []).filter(t => t.teamId === teamId);
+    },
+    async save(training: Training): Promise<Training> {
+      await delay(300);
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const dto = {
+            id: training.id,
+            team_id: training.teamId,
+            date: training.date,
+            title: training.title,
+            description: training.description,
+            intensity: training.intensity,
+            duration: training.duration,
+            type: training.type,
+            focus_items: training.focusItems,
+            notes: training.notes,
+            status: training.status,
+            votes: training.votes || {},
+          };
+          await client.from('trainings').upsert(dto);
+        }
+      }
+      const all = getLocalItem<Training[]>(LOCAL_STORAGE_KEYS.TRAININGS, []);
+      const idx = all.findIndex(t => t.id === training.id);
+      if (idx >= 0) all[idx] = training; else all.push(training);
+      setLocalItem(LOCAL_STORAGE_KEYS.TRAININGS, all);
+      return training;
+    },
+    async vote(trainingId: string, userId: string, type: 'up' | 'down') {
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data } = await client.from('trainings').select('votes').eq('id', trainingId).single();
+          const votes = (data?.votes || {}) as Record<string, 'up' | 'down'>;
+          votes[userId] = type;
+          await client.from('trainings').update({ votes }).eq('id', trainingId);
+        }
+      }
+      const all = getLocalItem<Training[]>(LOCAL_STORAGE_KEYS.TRAININGS, []);
+      const t = all.find(x => x.id === trainingId);
+      if (t) {
+        if (!t.votes) t.votes = {};
+        t.votes[userId] = type;
+        setLocalItem(LOCAL_STORAGE_KEYS.TRAININGS, all);
+      }
+    }
+  },
+
+  requests: {
+    async listByTeam(teamId: string): Promise<JoinRequest[]> {
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data } = await client.from('join_requests').select('*').eq('team_id', teamId);
+          if (data) return data.map(r => ({
+            id: r.id,
+            userId: r.user_id,
+            userEmail: r.user_email,
+            teamId: r.team_id,
+            playerName: r.player_name,
+            status: r.status,
+            createdAt: r.created_at
+          })) as JoinRequest[];
+        }
+      }
+      return getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []).filter(r => r.teamId === teamId);
+    },
+    async listByUser(userId: string): Promise<JoinRequest[]> {
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data } = await client.from('join_requests').select('*').eq('user_id', userId);
+          if (data) return data.map(r => ({
+            id: r.id,
+            userId: r.user_id,
+            userEmail: r.user_email,
+            teamId: r.team_id,
+            playerName: r.player_name,
+            status: r.status,
+            createdAt: r.created_at
+          })) as JoinRequest[];
+        }
+      }
+      return getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []).filter(r => r.userId === userId);
+    },
+    async create(req: JoinRequest) {
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          await client.from('join_requests').insert({
+            id: req.id,
+            user_id: req.userId,
+            user_email: req.userEmail,
+            team_id: req.teamId,
+            player_name: req.playerName,
+            status: req.status,
+            created_at: req.createdAt
+          });
+        }
+      }
+      const all = getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []);
+      all.push(req);
+      setLocalItem(LOCAL_STORAGE_KEYS.REQUESTS, all);
+    },
+    async respond(id: string, status: 'accepted' | 'declined') {
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          await client.from('join_requests').update({ status }).eq('id', id);
+        }
+      }
+      const all = getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []);
+      const r = all.find(x => x.id === id);
+      if (r) {
+        r.status = status;
+        setLocalItem(LOCAL_STORAGE_KEYS.REQUESTS, all);
+      }
+    }
+  },
+
+  global: {
+    async listAllTeams(): Promise<Team[]> {
+      if (isSupabaseActive()) {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data } = await client.from('teams').select('*');
+          if (data) return data.map(t => ({
+            id: t.id,
+            userId: t.user_id,
+            name: t.name,
+            sport: t.sport,
+            primaryColor: t.primary_color,
+            secondaryColor: t.secondary_color,
+            createdAt: t.created_at,
+            customStatsConfig: t.custom_stats_config
+          })) as Team[];
+        }
+      }
+      return getLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, []);
+    }
+  }
 };

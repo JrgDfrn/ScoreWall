@@ -4,14 +4,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Database, Copy, Check, Info, RefreshCw, Trash2, Key } from 'lucide-react';
+import { Database, Copy, Check, Info, RefreshCw, Trash2, Key, XCircle } from 'lucide-react';
 import { getSupabaseConfig, saveSupabaseConfig, clearSupabaseConfig, isSupabaseActive, SUPABASE_SQL_SCHEMA } from '../db';
 
 interface SupabaseConfigPanelProps {
   onConfigChanged: () => void;
+  onClose?: () => void;
 }
 
-export default function SupabaseConfigPanel({ onConfigChanged }: SupabaseConfigPanelProps) {
+export default function SupabaseConfigPanel({ onConfigChanged, onClose }: SupabaseConfigPanelProps) {
   const [url, setUrl] = useState('');
   const [anonKey, setAnonKey] = useState('');
   const [copied, setCopied] = useState(false);
@@ -40,6 +41,9 @@ export default function SupabaseConfigPanel({ onConfigChanged }: SupabaseConfigP
     setActive(true);
     setMsg({ text: 'Credenciales de Supabase guardadas localmente en este navegador.', type: 'success' });
     onConfigChanged();
+    if (onClose) {
+      setTimeout(onClose, 1000);
+    }
   };
 
   const handleClear = () => {
@@ -59,14 +63,24 @@ export default function SupabaseConfigPanel({ onConfigChanged }: SupabaseConfigP
 
   return (
     <div id="supabase-config-panel" className="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 text-slate-100 shadow-xl max-w-3xl mx-auto my-6">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
-          <Database className="w-6 h-6 text-emerald-400" />
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20">
+            <Database className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold font-sans tracking-tight">Conexión a base de datos (Supabase)</h2>
+            <p className="text-xs text-slate-400">Vincula tu base de datos en la nube o sigue jugando en local</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold font-sans tracking-tight">Conexión a base de datos (Supabase)</h2>
-          <p className="text-xs text-slate-400">Vincula tu base de datos en la nube o sigue jugando en local</p>
-        </div>
+        {onClose && (
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-white/5 rounded-full transition-colors text-slate-500 hover:text-white"
+          >
+            <XCircle className="w-6 h-6" />
+          </button>
+        )}
       </div>
 
       <div className="mb-6 p-4 rounded-xl bg-slate-950 border border-slate-800 text-sm leading-relaxed">

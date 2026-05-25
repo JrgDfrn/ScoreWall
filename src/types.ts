@@ -35,6 +35,7 @@ export interface PlayerStats {
 export interface Player {
   id: string;
   teamId: string;
+  userId?: string; // Linked user ID if claimed
   name: string;
   number: number;
   position: string;
@@ -55,6 +56,7 @@ export interface Match {
   goalsFor?: number;
   goalsAgainst?: number;
   scorers?: string[]; // IDs or names of players who scored
+  callupIds?: string[]; // IDs of players selected for the match squad
   notes?: string;
 }
 
@@ -85,7 +87,37 @@ export interface Tactic {
   chips: ChipState[];
   lines: LineDrawState[];
   createdAt: string;
+  type: 'tactic' | 'training';
+  rating?: number;
+  categories?: string[];
 }
+
+export interface Training {
+  id: string;
+  teamId: string;
+  date: string;
+  title: string;
+  description: string;
+  intensity: 'low' | 'medium' | 'high';
+  duration: number; // in minutes
+  type: 'tactical' | 'physical' | 'technical' | 'recovery' | 'game';
+  focusItems?: string[];
+  notes?: string;
+  status: 'planned' | 'completed';
+  votes?: Record<string, 'up' | 'down'>; // userId -> vote
+}
+
+export interface JoinRequest {
+  id: string;
+  userId: string;
+  userEmail: string;
+  teamId: string;
+  playerName: string; // Name they claim to be in the roster
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: string;
+}
+
+export type UserRole = 'coach' | 'player' | 'none';
 
 export interface SupabaseConfig {
   url: string;

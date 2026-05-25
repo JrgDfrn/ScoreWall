@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Team, Player, CustomStatDefinition } from '../types';
 import { DB } from '../db';
-import { UserPlus, Star, BarChart3, Settings, Trash2, Edit2, Minus, Plus } from 'lucide-react';
+import { UserPlus, Star, BarChart3, Settings, Trash2, Edit2, Minus, Plus, Target, Trophy, Activity, UserCircle, Zap, ShieldAlert } from 'lucide-react';
 
 interface PlayersManagerProps {
   team: Team;
@@ -382,11 +382,11 @@ export default function PlayersManager({ team, onTeamUpdated }: PlayersManagerPr
             <div className="space-y-2 pt-2.5 border-t border-slate-850 bg-[#0b0e14]/50 p-3 rounded-xl">
               <span className="text-[10px] font-bold text-slate-400 block mb-1">Métricas Activadas:</span>
               <div className="space-y-1.5 text-2xs text-slate-500 font-medium pl-1">
-                <p>⚽ Goles (Principal)</p>
-                <p>🎯 Asistencias</p>
-                <p>🟨 Tarjetas Amarillas / Rojas</p>
+                <p className="flex items-center gap-1.5"><Target className="w-2.5 h-2.5 text-amber-500" /> Goles (Principal)</p>
+                <p className="flex items-center gap-1.5"><Zap className="w-2.5 h-2.5 text-cyan-500" /> Asistencias</p>
+                <p className="flex items-center gap-1.5"><ShieldAlert className="w-2.5 h-2.5 text-red-500" /> Tarjetas Disciplinarias</p>
                 {(team.customStatsConfig || []).map(c => (
-                  <p key={c.id}>⭐ {c.name} ({c.category === 'performance' ? 'Técnico' : 'Disciplina'})</p>
+                  <p key={c.id} className="flex items-center gap-1.5 text-indigo-400/80"><Star className="w-2.5 h-2.5" /> {c.name}</p>
                 ))}
               </div>
             </div>
@@ -433,8 +433,8 @@ export default function PlayersManager({ team, onTeamUpdated }: PlayersManagerPr
                         <h3 className="font-bold text-white max-w-[160px] truncate leading-tight transition">
                           {plr.name}
                         </h3>
-                        <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block mt-0.5">
-                          {plr.position}
+                        <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block mt-0.5 flex items-center gap-1">
+                          <UserCircle className="w-2.5 h-2.5" /> {plr.position}
                         </span>
                       </div>
                     </div>
@@ -473,95 +473,95 @@ export default function PlayersManager({ team, onTeamUpdated }: PlayersManagerPr
                   </span>
 
                   {/* Core Goal Trackers & Core stats */}
-                  <div className="grid grid-cols-1 gap-2 text-2xs">
-                    {/* Goles (Goles is explicitly requested to be trackable) */}
-                    <div className="bg-[#0b0e14]/70 rounded-xl p-2.5 flex items-center justify-between border border-slate-850">
-                      <div>
-                        <span className="font-bold text-slate-300 block">⚽ Goles</span>
-                        <span className="text-[9px] text-slate-500 font-bold uppercase">Anotados</span>
+                  <div className="grid grid-cols-2 gap-2 text-2xs">
+                    {/* Goles */}
+                    <div className="bg-[#0b0e14]/70 rounded-xl p-2 flex items-center justify-between border border-slate-850 h-11 px-2.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Trophy className="w-3 h-3 text-amber-500 shrink-0" />
+                        <span className="font-bold text-slate-300 truncate">Goles</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => modifyStat(plr, 'goals', -1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-2.5 h-2.5" />
                         </button>
-                        <span className="font-extrabold text-sm text-[orange] min-w-5 text-center leading-none">{plr.stats.goals}</span>
+                        <span className="font-extrabold text-[#f59e0b] min-w-4 text-center text-xs">{plr.stats.goals}</span>
                         <button
                           onClick={() => modifyStat(plr, 'goals', 1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     </div>
 
                     {/* Asistencias */}
-                    <div className="bg-[#0b0e14]/70 rounded-xl p-2.5 flex items-center justify-between border border-slate-850">
-                      <div>
-                        <span className="font-bold text-slate-300 block">🎯 Asistencias</span>
-                        <span className="text-[9px] text-slate-500 font-bold uppercase">Pases</span>
+                    <div className="bg-[#0b0e14]/70 rounded-xl p-2 flex items-center justify-between border border-slate-850 h-11 px-2.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Target className="w-3 h-3 text-cyan-500 shrink-0" />
+                        <span className="font-bold text-slate-300 truncate">Asistencias</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => modifyStat(plr, 'assists', -1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-2.5 h-2.5" />
                         </button>
-                        <span className="font-extrabold text-sm text-[#06b6d4] min-w-5 text-center leading-none">{plr.stats.assists}</span>
+                        <span className="font-extrabold text-[#06b6d4] min-w-4 text-center text-xs">{plr.stats.assists}</span>
                         <button
                           onClick={() => modifyStat(plr, 'assists', 1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Tarjetas Amarillas */}
-                    <div className="bg-[#0b0e14]/70 rounded-xl p-2.5 flex items-center justify-between border border-slate-850">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-3.5 bg-[#fbbf24] rounded-sm shadow-sm" />
-                        <span className="font-bold text-slate-300">Amarilla</span>
+                    {/* Tarjeta Amarilla */}
+                    <div className="bg-[#0b0e14]/70 rounded-xl p-2 flex items-center justify-between border border-slate-850 h-11 px-2.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-2 h-3 bg-amber-400 rounded-sm shadow-sm shrink-0" />
+                        <span className="font-bold text-slate-300 truncate">Amarilla</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => modifyStat(plr, 'yellowCards', -1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-2.5 h-2.5" />
                         </button>
-                        <span className="font-bold text-xs text-slate-200 min-w-4 text-center">{plr.stats.yellowCards}</span>
+                        <span className="font-bold text-slate-200 min-w-4 text-center text-xs">{plr.stats.yellowCards}</span>
                         <button
                           onClick={() => modifyStat(plr, 'yellowCards', 1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Tarjetas Rojas */}
-                    <div className="bg-[#0b0e14]/70 rounded-xl p-2.5 flex items-center justify-between border border-slate-850">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-3.5 bg-red-500 rounded-sm shadow-sm" />
-                        <span className="font-bold text-slate-300">Roja</span>
+                    {/* Tarjeta Roja */}
+                    <div className="bg-[#0b0e14]/70 rounded-xl p-2 flex items-center justify-between border border-slate-850 h-11 px-2.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-2 h-3 bg-red-500 rounded-sm shadow-sm shrink-0" />
+                        <span className="font-bold text-slate-300 truncate">Roja</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => modifyStat(plr, 'redCards', -1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-2.5 h-2.5" />
                         </button>
-                        <span className="font-bold text-xs text-slate-200 min-w-4 text-center">{plr.stats.redCards}</span>
+                        <span className="font-bold text-slate-200 min-w-4 text-center text-xs">{plr.stats.redCards}</span>
                         <button
                           onClick={() => modifyStat(plr, 'redCards', 1)}
-                          className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                          className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-400 hover:text-white transition cursor-pointer"
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     </div>
@@ -569,28 +569,28 @@ export default function PlayersManager({ team, onTeamUpdated }: PlayersManagerPr
 
                   {/* Dynamically Scaled Parameters Render */}
                   {(team.customStatsConfig || []).length > 0 && (
-                    <div className="grid grid-cols-1 gap-2 text-2xs pt-1">
+                    <div className="grid grid-cols-2 gap-2 text-2xs pt-1">
                       {(team.customStatsConfig || []).map((c) => {
                         const score = plr.stats.custom[c.id] !== undefined ? plr.stats.custom[c.id] : c.defaultValue;
                         return (
-                          <div key={c.id} className="bg-indigo-950/20 rounded-xl p-2.5 flex items-center justify-between border border-indigo-550/10">
-                            <div>
-                              <span className="font-bold text-indigo-300 block truncate max-w-[80px]">{c.name}</span>
-                              <span className="text-[8px] text-slate-500 uppercase font-black">Métrica</span>
+                          <div key={c.id} className="bg-indigo-950/20 rounded-xl p-2 flex items-center justify-between border border-indigo-550/10 h-11 px-2.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Activity className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <span className="font-bold text-indigo-300 truncate" title={c.name}>{c.name}</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 onClick={() => modifyCustomStat(plr, c.id, -1)}
-                                className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                                className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
                               >
-                                <Minus className="w-3 h-3" />
+                                <Minus className="w-2.5 h-2.5" />
                               </button>
-                              <span className="font-extrabold text-sm text-[#818cf8] min-w-5 text-center leading-none">{score}</span>
+                              <span className="font-extrabold text-xs text-[#818cf8] min-w-4 text-center">{score}</span>
                               <button
                                 onClick={() => modifyCustomStat(plr, c.id, 1)}
-                                className="w-5 h-5 bg-[#161b26] hover:bg-slate-800 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
+                                className="w-4.5 h-4.5 bg-[#161b26] hover:bg-slate-850 border border-slate-800 rounded flex items-center justify-center text-slate-450 hover:text-white transition cursor-pointer"
                               >
-                                <Plus className="w-3 h-3" />
+                                <Plus className="w-2.5 h-2.5" />
                               </button>
                             </div>
                           </div>

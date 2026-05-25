@@ -10,18 +10,18 @@ import { Shield, Waves, PlusCircle, Trash2, Calendar, Users, LogOut, Settings2, 
 
 interface TeamSelectorProps {
   userId: string;
-  onSelectTeam: (team: Team) => void;
+  onTeamSelected: (team: Team) => void;
   onLogOut: () => void;
   onToggleSupabaseSettings: () => void;
-  showSupabaseIcon: boolean;
+  showSupabaseIcon?: boolean;
 }
 
 export default function TeamSelector({
   userId,
-  onSelectTeam,
+  onTeamSelected,
   onLogOut,
   onToggleSupabaseSettings,
-  showSupabaseIcon
+  showSupabaseIcon = false
 }: TeamSelectorProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,7 +326,15 @@ export default function TeamSelector({
                             {team.name}
                           </h3>
                           <span className="text-[10px] text-slate-500 uppercase tracking-widest font-extrabold flex items-center gap-1">
-                            {team.sport === 'football' ? '⚽ Fútbol' : '🤽 Waterpolo'}
+                            {team.sport === 'football' ? (
+                              <>
+                                <Shield className="w-2.5 h-2.5 text-indigo-500/70" /> Fútbol
+                              </>
+                            ) : (
+                              <>
+                                <Waves className="w-2.5 h-2.5 text-cyan-500/70" /> Waterpolo
+                              </>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -378,7 +386,7 @@ export default function TeamSelector({
                   </div>
 
                   <button
-                    onClick={() => onSelectTeam(team)}
+                    onClick={() => onTeamSelected(team)}
                     className="w-full mt-5 bg-[#0b0e14]/70 group-hover:bg-indigo-600 hover:!bg-indigo-500 text-slate-300 group-hover:text-white font-bold text-xs py-2.5 rounded-xl border border-slate-800/60 group-hover:border-transparent transition flex items-center justify-center gap-1.5 shadow"
                   >
                     <span>Entrar al Vestuario</span>
