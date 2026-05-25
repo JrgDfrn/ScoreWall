@@ -126,7 +126,7 @@ export default function App() {
   // 2. ACTIVE TEAM VIEW (Route based on viewMode)
   if (activeTeam) {
     if (viewMode === 'player') {
-      const currentMembership = playerMemberships.find(m => m.team.id === activeTeam.id);
+      const currentMembership = roster.find(p => p.userId === user.id) || playerMemberships.find(m => m.team.id === activeTeam.id)?.player;
       if (currentMembership) {
         return (
           <div className="min-h-screen bg-[#0b0e14] flex flex-col">
@@ -152,8 +152,32 @@ export default function App() {
                </div>
             </header>
             <main className="flex-1 overflow-y-auto">
-               <PlayerDashboard team={activeTeam} player={currentMembership.player} userId={user.id} />
+               <PlayerDashboard team={activeTeam} player={currentMembership} userId={user.id} />
             </main>
+          </div>
+        );
+      } else {
+        return (
+          <div className="min-h-screen bg-[#0b0e14] flex flex-col justify-center items-center">
+             <span className="w-10 h-10 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin inline-block mb-3"></span>
+             <p className="text-slate-400 text-xs font-black uppercase tracking-wider">Buscando vinculación con jugador...</p>
+             <button 
+               onClick={async () => {
+                 await checkSession();
+                 await fetchRoster();
+               }}
+               className="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition animate-pulse"
+             >
+               Reintentar Sincronización
+             </button>
+             <button 
+               onClick={() => {
+                 setActiveTeam(null);
+               }}
+               className="mt-2 text-slate-500 hover:text-slate-300 text-xs font-bold uppercase transition"
+             >
+               Volver
+             </button>
           </div>
         );
       }
@@ -264,9 +288,12 @@ export default function App() {
                         userId={user.id} 
                         userEmail={user.email} 
                         onJoinRequested={checkSession} 
-                        onSelectTeam={(team) => {
+                        onSelectTeam={async (team) => {
+                          setLoading(true);
+                          await checkSession();
                           setViewMode('player');
                           setActiveTeam(team);
+                          setLoading(false);
                         }}
                       />
                     </div>

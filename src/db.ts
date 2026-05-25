@@ -95,6 +95,7 @@ create table if not exists public.teams (
 create table if not exists public.players (
   id uuid default gen_random_uuid() primary key,
   team_id uuid references public.teams(id) on delete cascade not null,
+  user_id text, -- ID de usuario de Supabase Auth vinculado
   name text not null,
   number integer not null,
   position text not null,
@@ -121,7 +122,19 @@ create table if not exists public.matches (
 );
 
 -- 4. Tabla de Pizarras/Tácticas (tactics)
--- ... (existing docs)
+create table if not exists public.tactics (
+  id uuid default gen_random_uuid() primary key,
+  team_id uuid references public.teams(id) on delete cascade not null,
+  name text not null,
+  description text,
+  sport text not null,
+  chips jsonb default '[]'::jsonb not null,
+  lines jsonb default '[]'::jsonb not null,
+  type text not null check (type in ('tactic', 'training')),
+  rating integer,
+  categories text[] default '{}'::text[],
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
 
 -- 5. Tabla de Entrenamientos (trainings)
 create table if not exists public.trainings (
@@ -150,8 +163,13 @@ create table if not exists public.join_requests (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- Habilitar Row Level Security (RLS) o deshabilitar temporalmente para pruebas sencillas.
--- Para pruebas rápidas sin configurar políticas complejas, puedes usar las tablas libremente.
+-- Desactivar RLS temporalmente o crear políticas permisivas para un correcto funcionamiento
+alter table public.teams disable row level security;
+alter table public.players disable row level security;
+alter table public.matches disable row level security;
+alter table public.tactics disable row level security;
+alter table public.trainings disable row level security;
+alter table public.join_requests disable row level security;
 `;
 
 // Helper: load from localStorage
