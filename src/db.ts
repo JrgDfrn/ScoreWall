@@ -16,9 +16,8 @@ function generateUUID(): string {
 }
 
 // 1. Detect Config from Environment
-const anyMeta = import.meta as any;
-const ENV_SUPABASE_URL = (anyMeta.env?.VITE_SUPABASE_URL as string) || '';
-const ENV_SUPABASE_KEY = (anyMeta.env?.VITE_SUPABASE_ANON_KEY as string) || '';
+const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const ENV_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export function getSupabaseConfig(): SupabaseConfig {
   return {

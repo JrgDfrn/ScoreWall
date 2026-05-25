@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { Team, Player, UserRole } from './types';
 import { DB, isSupabaseActive } from './db';
 import LoginScreen from './components/LoginScreen';
+import SupabaseOnboarding from './components/SupabaseOnboarding';
 import TeamSelector from './components/TeamSelector';
 import TacticalWhiteboard from './components/TacticalWhiteboard';
 import TrainingsManager from './components/TrainingsManager';
@@ -106,6 +107,11 @@ export default function App() {
   const handleTeamUpdated = (updatedTeam: Team) => {
     setActiveTeam(updatedTeam);
   };
+
+  // Check if Supabase is configured first. If not, show Onboarding setup instructions.
+  if (!isSupabaseActive()) {
+    return <SupabaseOnboarding />;
+  }
 
   if (loading) {
     return (
