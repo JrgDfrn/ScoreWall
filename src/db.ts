@@ -15,28 +15,24 @@ function generateUUID(): string {
   });
 }
 
-// 1. Detect Config from Environment OR LocalStorage Override
+// 1. Detect Config from Environment
 const anyMeta = import.meta as any;
 const ENV_SUPABASE_URL = (anyMeta.env?.VITE_SUPABASE_URL as string) || '';
 const ENV_SUPABASE_KEY = (anyMeta.env?.VITE_SUPABASE_ANON_KEY as string) || '';
 
 export function getSupabaseConfig(): SupabaseConfig {
-  const localUrl = localStorage.getItem('team_tactics_sb_url') || '';
-  const localKey = localStorage.getItem('team_tactics_sb_key') || '';
   return {
-    url: localUrl || ENV_SUPABASE_URL,
-    anonKey: localKey || ENV_SUPABASE_KEY,
+    url: ENV_SUPABASE_URL,
+    anonKey: ENV_SUPABASE_KEY,
   };
 }
 
 export function saveSupabaseConfig(config: SupabaseConfig): void {
-  localStorage.setItem('team_tactics_sb_url', config.url.trim());
-  localStorage.setItem('team_tactics_sb_key', config.anonKey.trim());
+  // Deprecated, no-op since configuration is fully handled via Environment Variables/Settings.
 }
 
 export function clearSupabaseConfig(): void {
-  localStorage.removeItem('team_tactics_sb_url');
-  localStorage.removeItem('team_tactics_sb_key');
+  // Deprecated, no-op since configuration is fully handled via Environment Variables/Settings.
 }
 
 export function isSupabaseActive(): boolean {
@@ -44,35 +40,30 @@ export function isSupabaseActive(): boolean {
   return !!(config.url && config.anonKey);
 }
 
-// Instantiate Supabase Client lazily to avoid crashing
+// Instantiate Supabase Client lazily or fail with actionable guidance
 let supabaseInstance: SupabaseClient | null = null;
-function getSupabaseClient(): SupabaseClient | null {
-  if (!isSupabaseActive()) {
-    supabaseInstance = null;
-    return null;
+function getSupabaseClient(): SupabaseClient {
+  const config = getSupabaseConfig();
+  if (!config.url || !config.anonKey) {
+    throw new Error(
+      'La base de datos de Supabase no está configurada. Por favor, añade las variables de entorno VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en la pestaña Settings de la barra superior del editor.'
+    );
   }
   if (!supabaseInstance) {
-    const config = getSupabaseConfig();
     try {
       supabaseInstance = createClient(config.url, config.anonKey, {
         auth: { persistSession: true, autoRefreshToken: true }
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to initialize Supabase client:', e);
-      return null;
+      throw new Error('Error al inicializar el cliente de Supabase: ' + e.message);
     }
   }
   return supabaseInstance;
 }
 
-// 2. Local Storage Fallback Data Providers
+// 2. Persistent session keys for user authentication
 const LOCAL_STORAGE_KEYS = {
-  TEAMS: 'tt_local_teams',
-  PLAYERS: 'tt_local_players',
-  MATCHES: 'tt_local_matches',
-  TACTICS: 'tt_local_tactics',
-  TRAININGS: 'tt_local_trainings',
-  REQUESTS: 'tt_local_requests',
   USER: 'tt_local_auth_user',
 };
 
@@ -172,808 +163,377 @@ alter table public.trainings disable row level security;
 alter table public.join_requests disable row level security;
 `;
 
-// Helper: load from localStorage
-function getLocalItem<T>(key: string, defaultValue: T): T {
-  const item = localStorage.getItem(key);
-  if (!item) return defaultValue;
-  try {
-    return JSON.parse(item) as T;
-  } catch {
-    return defaultValue;
-  }
-}
-
-// Helper: save to localStorage
-function setLocalItem<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-// Seed INITIAL DEMO DATA for a rich immediate experience if empty!
-export function checkAndSeedLocalData(userId: string) {
-  const teams = getLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, []);
-  if (teams.length === 0) {
-    const demoTeamId = 'demo-team-id';
-    
-    // Create Football Demo Team
-    const demoTeam: Team = {
-      id: demoTeamId,
-      userId: userId,
-      name: 'Galácticos FC',
-      sport: 'football',
-      primaryColor: '#3b82f6', // blue
-      secondaryColor: '#f59e0b', // amber
-      createdAt: new Date().toISOString(),
-      customStatsConfig: [
-        { id: 'saves', name: 'Paradas de Portero', category: 'performance', defaultValue: 0 },
-        { id: 'fouls', name: 'Faltas Cometidas', category: 'discipline', defaultValue: 0 },
-        { id: 'mvps', name: 'Premios MVP', category: 'performance', defaultValue: 0 }
-      ]
-    };
-    
-    // Create Waterpolo Demo Team
-    const demoTeamWpId = 'demo-team-wp-id';
-    const demoTeamWp: Team = {
-      id: demoTeamWpId,
-      userId: userId,
-      name: 'Tiburones WP',
-      sport: 'waterpolo',
-      primaryColor: '#06b6d4', // cyan
-      secondaryColor: '#ec4899', // pink
-      createdAt: new Date().toISOString(),
-      customStatsConfig: [
-        { id: 'exclusions', name: 'Exclusiones (20s)', category: 'discipline', defaultValue: 0 },
-        { id: 'saves_wp', name: 'Paradas del Portero', category: 'performance', defaultValue: 0 }
-      ]
-    };
-
-    const demoPlayers: Player[] = [
-      // Football Players
-      {
-        id: 'p1',
-        teamId: demoTeamId,
-        name: 'Carlos Puyol (Capitán)',
-        number: 5,
-        position: 'Defensa',
-        active: true,
-        stats: { goals: 2, assists: 1, yellowCards: 3, redCards: 0, custom: { saves: 0, fouls: 8, mvps: 1 } },
-        notes: 'Líder de la defensa. Excelente al corte y juego aéreo.'
-      },
-      {
-        id: 'p2',
-        teamId: demoTeamId,
-        name: 'Lionel Messi',
-        number: 10,
-        position: 'Delantero',
-        active: true,
-        stats: { goals: 24, assists: 12, yellowCards: 1, redCards: 0, custom: { saves: 0, fouls: 2, mvps: 6 } },
-        notes: 'Habilidad extrema. Lanzador de faltas principal.'
-      },
-      {
-        id: 'p3',
-        teamId: demoTeamId,
-        name: 'Iker Casillas',
-        number: 1,
-        position: 'Portero',
-        active: true,
-        stats: { goals: 0, assists: 0, yellowCards: 0, redCards: 0, custom: { saves: 42, fouls: 0, mvps: 2 } },
-        notes: 'Reflejos de gato. Muy seguro bajo palos.'
-      },
-      // Waterpolo Players
-      {
-        id: 'p4',
-        teamId: demoTeamWpId,
-        name: 'Felipe Perrone',
-        number: 10,
-        position: 'Atacante',
-        active: true,
-        stats: { goals: 11, assists: 8, yellowCards: 1, redCards: 0, custom: { exclusions: 2, saves_wp: 0 } },
-        notes: 'Director de juego y goleador consagrado.'
-      },
-      {
-        id: 'p5',
-        teamId: demoTeamWpId,
-        name: 'Dani López Pinedo',
-        number: 1,
-        position: 'Portero',
-        active: true,
-        stats: { goals: 0, assists: 2, yellowCards: 0, redCards: 0, custom: { exclusions: 0, saves_wp: 36 } },
-        notes: 'Muro imbatible en la portería.'
-      }
-    ];
-
-    const demoMatches: Match[] = [
-      {
-        id: 'm1',
-        teamId: demoTeamId,
-        opponent: 'Titanes del Norte',
-        date: '2026-06-02',
-        time: '18:00',
-        location: 'Estadio Metropolitano',
-        status: 'future',
-        notes: 'Partido clave para el liderato de liga. Llevar equipación azul.'
-      },
-      {
-        id: 'm2',
-        teamId: demoTeamId,
-        opponent: 'Depor Real',
-        date: '2026-05-18',
-        time: '20:30',
-        location: 'Campo de Entrenamiento Central',
-        status: 'completed',
-        goalsFor: 4,
-        goalsAgainst: 2,
-        notes: 'Gran remontada en la segunda mitad. Goles de Lionel (3) y Puyol (1).'
-      },
-      // Waterpolo Matches
-      {
-        id: 'm3',
-        teamId: demoTeamWpId,
-        opponent: 'CN Sabadell',
-        date: '2026-06-10',
-        time: '12:00',
-        location: 'Piscina Municipal Pere Serrat',
-        status: 'future',
-        notes: 'Semifinales de Copa. Máxima concentración en defensa.'
-      },
-      {
-        id: 'm4',
-        teamId: demoTeamWpId,
-        opponent: 'CN Barceloneta',
-        date: '2026-05-12',
-        time: '19:00',
-        location: 'Club Natació Barcelona',
-        status: 'completed',
-        goalsFor: 9,
-        goalsAgainst: 8,
-        notes: 'Final de liga épica decidida en el último segundo por Perrone.'
-      }
-    ];
-
-    const demoTactics: Tactic[] = [
-      {
-        id: 't1',
-        teamId: demoTeamId,
-        name: 'Presión Alta 4-3-3',
-        description: 'Táctica ofensiva para forzar el error en salida de balón del rival.',
-        sport: 'football',
-        chips: [
-          { id: 'c1', label: 'GK', number: 1, x: 50, y: 88, color: '#10b981', type: 'player' },
-          { id: 'c2', label: 'DEF_I', number: 5, x: 30, y: 68, color: '#3b82f6', type: 'player' },
-          { id: 'c3', label: 'DEF_D', number: 4, x: 70, y: 68, color: '#3b82f6', type: 'player' },
-          { id: 'c4', label: 'MC', number: 8, x: 50, y: 48, color: '#3b82f6', type: 'player' },
-          { id: 'c5', label: 'EXT_I', number: 11, x: 22, y: 25, color: '#3b82f6', type: 'player' },
-          { id: 'c6', label: 'EXT_D', number: 7, x: 78, y: 25, color: '#3b82f6', type: 'player' },
-          { id: 'c7', label: 'DEL', number: 10, x: 50, y: 20, color: '#3b82f6', type: 'player' },
-          { id: 'c_ball', label: 'Balón', x: 50, y: 35, color: '#ffffff', type: 'ball' }
-        ],
-        lines: [
-          { id: 'l1', points: [{ x: 50, y: 48 }, { x: 50, y: 35 }], color: '#f59e0b', width: 3, style: 'arrow' },
-          { id: 'l2', points: [{ x: 22, y: 25 }, { x: 42, y: 21 }], color: '#10b981', width: 2, style: 'dashed' }
-        ],
-        createdAt: new Date().toISOString(),
-        type: 'tactic'
-      },
-      {
-        id: 't2',
-        teamId: demoTeamWpId,
-        name: 'Ataque en Superioridad 6 contra 5',
-        description: 'Distribución en arco para circulación rápida y disparo del extremo izquierdo.',
-        sport: 'waterpolo',
-        chips: [
-          { id: 'c_wp1', label: 'GK', number: 1, x: 50, y: 92, color: '#10b981', type: 'player' },
-          { id: 'c_wp2', label: 'Punta', number: 10, x: 50, y: 40, color: '#06b6d4', type: 'player' },
-          { id: 'c_wp3', label: 'Atac1', number: 4, x: 25, y: 55, color: '#06b6d4', type: 'player' },
-          { id: 'c_wp4', label: 'Atac2', number: 7, x: 75, y: 55, color: '#06b6d4', type: 'player' },
-          { id: 'c_wp5', label: 'L_Izq', number: 2, x: 15, y: 70, color: '#06b6d4', type: 'player' },
-          { id: 'c_wp6', label: 'L_Der', number: 3, x: 85, y: 70, color: '#06b6d4', type: 'player' },
-          { id: 'c_ball_wp', label: 'Balón', x: 75, y: 55, color: '#f59e0b', type: 'ball' }
-        ],
-        lines: [
-          { id: 'l_wp1', points: [{ x: 75, y: 55 }, { x: 50, y: 40 }], color: '#ec4899', width: 3, style: 'arrow' }
-        ],
-        createdAt: new Date().toISOString(),
-        type: 'tactic'
-      }
-    ];
-
-    setLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, [demoTeam, demoTeamWp]);
-    setLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, demoPlayers);
-    setLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, demoMatches);
-    setLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, demoTactics);
-  }
-}
-
-// 3. COMPLETE DB INTERFACE (UNIFYING LOCAL AND SUPABASE)
+// 3. COMPLETE DB INTERFACE (SUPABASE DRIVEN ONLY)
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const DB = {
-  // Authentication Mocking + Real
+  // Authentication via Real Supabase Client
   auth: {
     async getUser() {
-      if (isSupabaseActive()) {
+      try {
         const client = getSupabaseClient();
-        if (client) {
-          const { data } = await client.auth.getUser();
-          if (data.user) {
-            return { id: data.user.id, email: data.user.email };
-          }
+        const { data } = await client.auth.getUser();
+        if (data.user) {
+          return { id: data.user.id, email: data.user.email || '' };
         }
-      }
-      // Local Auth
-      const user = localStorage.getItem(LOCAL_STORAGE_KEYS.USER);
-      if (user) {
-        try {
-          return JSON.parse(user) as { id: string; email: string };
-        } catch {
-          return null;
-        }
+      } catch (e) {
+        console.warn('Supabase not connected yet or failed:', e);
       }
       return null;
     },
 
     async signUp(email: string, pass: string) {
-      await delay(800);
-      // If client-side URL is filled, register via Supabase
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data, error } = await client.auth.signUp({ email, password: pass });
-          if (error) throw new Error(error.message);
-          return { id: data.user?.id || 'sb-user', email: data.user?.email || email };
-        }
-      }
-      // Local Auth Register
-      const mockId = 'local-user-' + generateUUID().substring(0, 8);
-      const session = { id: mockId, email };
-      localStorage.setItem(LOCAL_STORAGE_KEYS.USER, JSON.stringify(session));
-      // Seed initial teams/whiteboards for this local user!
-      checkAndSeedLocalData(mockId);
-      return session;
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.signUp({ email, password: pass });
+      if (error) throw new Error(error.message);
+      if (!data.user) throw new Error('No se pudo completar el registro. Inténtalo de nuevo.');
+      return { id: data.user.id, email: data.user.email || email };
     },
 
     async signIn(email: string, pass: string) {
-      await delay(800);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
-          if (error) throw new Error(error.message);
-          return { id: data.user?.id || 'sb-user', email: data.user?.email || email };
-        }
-      }
-      // Local Auth Login (any password works for simple browser-storage mode)
-      const mockId = 'local-user-' + email.split('@')[0];
-      const session = { id: mockId, email };
-      localStorage.setItem(LOCAL_STORAGE_KEYS.USER, JSON.stringify(session));
-      checkAndSeedLocalData(mockId);
-      return session;
+      const client = getSupabaseClient();
+      const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
+      if (error) throw new Error(error.message);
+      if (!data.user) throw new Error('Credenciales inválidas o usuario no configurado.');
+      return { id: data.user.id, email: data.user.email || email };
     },
 
     async signOut() {
-      if (isSupabaseActive()) {
+      try {
         const client = getSupabaseClient();
-        if (client) {
-          await client.auth.signOut();
-        }
+        await client.auth.signOut();
+      } catch (e) {
+        console.warn('Sign out failed:', e);
       }
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.USER);
     },
   },
 
   // Teams Management
   teams: {
     async list(userId: string): Promise<Team[]> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data, error } = await client
-            .from('teams')
-            .select('*')
-            .eq('user_id', userId);
-          if (error) {
-            console.error('Supabase teams get failed:', error);
-          } else if (data) {
-            return data.map((t: any) => ({
-              id: t.id,
-              userId: t.user_id,
-              name: t.name,
-              sport: t.sport,
-              primaryColor: t.primary_color,
-              secondaryColor: t.secondary_color,
-              createdAt: t.created_at,
-              customStatsConfig: t.custom_stats_config,
-            })) as Team[];
-          }
-        }
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('teams')
+        .select('*')
+        .eq('user_id', userId);
+      if (error) {
+        console.error('Supabase teams get failed:', error);
+        throw error;
       }
-      // Local Storage
-      const allTeams = getLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, []);
-      return allTeams.filter((t) => t.userId === userId);
+      return (data || []).map((t: any) => ({
+        id: t.id,
+        userId: t.user_id,
+        name: t.name,
+        sport: t.sport,
+        primaryColor: t.primary_color,
+        secondaryColor: t.secondary_color,
+        createdAt: t.created_at,
+        customStatsConfig: t.custom_stats_config,
+      })) as Team[];
     },
 
     async save(team: Team): Promise<Team> {
-      await delay(400);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const dto = {
-            id: team.id,
-            user_id: team.userId,
-            name: team.name,
-            sport: team.sport,
-            primary_color: team.primaryColor,
-            secondary_color: team.secondaryColor,
-            custom_stats_config: team.customStatsConfig || [],
-          };
-          const { error } = await client.from('teams').upsert(dto);
-          if (error) throw new Error(error.message);
-          return team;
-        }
-      }
-      // Local Storage
-      const allTeams = getLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, []);
-      const index = allTeams.findIndex((t) => t.id === team.id);
-      if (index >= 0) {
-        allTeams[index] = team;
-      } else {
-        allTeams.push(team);
-      }
-      setLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, allTeams);
+      const client = getSupabaseClient();
+      const dto = {
+        id: team.id,
+        user_id: team.userId,
+        name: team.name,
+        sport: team.sport,
+        primary_color: team.primaryColor,
+        secondary_color: team.secondaryColor,
+        custom_stats_config: team.customStatsConfig || [],
+      };
+      const { error } = await client.from('teams').upsert(dto);
+      if (error) throw new Error(error.message);
       return team;
     },
 
     async delete(teamId: string): Promise<void> {
-      await delay(400);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { error } = await client.from('teams').delete().eq('id', teamId);
-          if (error) throw new Error(error.message);
-          return;
-        }
-      }
-      // Local Storage
-      let allTeams = getLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, []);
-      allTeams = allTeams.filter((t) => t.id !== teamId);
-      setLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, allTeams);
-
-      // Cascading deletes locally
-      let allPlayers = getLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, []);
-      setLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, allPlayers.filter((p) => p.teamId !== teamId));
-
-      let allMatches = getLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, []);
-      setLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, allMatches.filter((m) => m.teamId !== teamId));
-
-      let allTactics = getLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, []);
-      setLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, allTactics.filter((t) => t.teamId !== teamId));
+      const client = getSupabaseClient();
+      const { error } = await client.from('teams').delete().eq('id', teamId);
+      if (error) throw new Error(error.message);
     },
   },
 
   // Players Management (scalable metrics)
   players: {
     async list(teamId: string): Promise<Player[]> {
-      await delay(200);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data, error } = await client
-            .from('players')
-            .select('*')
-            .eq('team_id', teamId);
-          if (error) {
-            console.error('Supabase players get failed:', error);
-          } else if (data) {
-            return data.map((p: any) => ({
-              id: p.id,
-              teamId: p.team_id,
-              userId: p.user_id,
-              name: p.name,
-              number: p.number,
-              position: p.position,
-              avatarUrl: p.avatar_url,
-              active: p.active,
-              stats: p.stats,
-              notes: p.notes,
-            })) as Player[];
-          }
-        }
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('players')
+        .select('*')
+        .eq('team_id', teamId);
+      if (error) {
+        console.error('Supabase players get failed:', error);
+        throw error;
       }
-      // Local Storage
-      const allPlayers = getLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, []);
-      return allPlayers.filter((p) => p.teamId === teamId);
+      return (data || []).map((p: any) => ({
+        id: p.id,
+        teamId: p.team_id,
+        userId: p.user_id,
+        name: p.name,
+        number: p.number,
+        position: p.position,
+        avatarUrl: p.avatar_url,
+        active: p.active,
+        stats: p.stats,
+        notes: p.notes,
+      })) as Player[];
     },
 
     async save(player: Player): Promise<Player> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const dto = {
-            id: player.id,
-            team_id: player.teamId,
-            user_id: player.userId || null,
-            name: player.name,
-            number: player.number,
-            position: player.position,
-            avatar_url: player.avatarUrl || null,
-            active: player.active,
-            stats: player.stats,
-            notes: player.notes || null,
-          };
-          const { error } = await client.from('players').upsert(dto);
-          if (error) throw new Error(error.message);
-          return player;
-        }
-      }
-      // Local Storage
-      const allPlayers = getLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, []);
-      const index = allPlayers.findIndex((p) => p.id === player.id);
-      if (index >= 0) {
-        allPlayers[index] = player;
-      } else {
-        allPlayers.push(player);
-      }
-      setLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, allPlayers);
+      const client = getSupabaseClient();
+      const dto = {
+        id: player.id,
+        team_id: player.teamId,
+        user_id: player.userId || null,
+        name: player.name,
+        number: player.number,
+        position: player.position,
+        avatar_url: player.avatarUrl || null,
+        active: player.active,
+        stats: player.stats,
+        notes: player.notes || null,
+      };
+      const { error } = await client.from('players').upsert(dto);
+      if (error) throw new Error(error.message);
       return player;
     },
 
     async delete(playerId: string): Promise<void> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { error } = await client.from('players').delete().eq('id', playerId);
-          if (error) throw new Error(error.message);
-          return;
-        }
-      }
-      // Local Storage
-      let allPlayers = getLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, []);
-      allPlayers = allPlayers.filter((p) => p.id !== playerId);
-      setLocalItem<Player[]>(LOCAL_STORAGE_KEYS.PLAYERS, allPlayers);
+      const client = getSupabaseClient();
+      const { error } = await client.from('players').delete().eq('id', playerId);
+      if (error) throw new Error(error.message);
     },
   },
 
   // Matches Management
   matches: {
     async list(teamId: string): Promise<Match[]> {
-      await delay(200);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data, error } = await client
-            .from('matches')
-            .select('*')
-            .eq('team_id', teamId);
-          if (error) {
-            console.error('Supabase matches get failed:', error);
-          } else if (data) {
-            return data.map((m: any) => ({
-              id: m.id,
-              teamId: m.team_id,
-              opponent: m.opponent,
-              date: m.date,
-              time: m.time,
-              location: m.location,
-              status: m.status,
-              goalsFor: m.goals_for,
-              goalsAgainst: m.goals_against,
-              scorers: m.scorers || [],
-              callupIds: m.callup_ids || [],
-              notes: m.notes,
-            })) as Match[];
-          }
-        }
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('matches')
+        .select('*')
+        .eq('team_id', teamId);
+      if (error) {
+        console.error('Supabase matches get failed:', error);
+        throw error;
       }
-      // Local Storage
-      const allMatches = getLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, []);
-      return allMatches.filter((m) => m.teamId === teamId);
+      return (data || []).map((m: any) => ({
+        id: m.id,
+        teamId: m.team_id,
+        opponent: m.opponent,
+        date: m.date,
+        time: m.time,
+        location: m.location,
+        status: m.status,
+        goalsFor: m.goals_for,
+        goalsAgainst: m.goals_against,
+        scorers: m.scorers || [],
+        callupIds: m.callup_ids || [],
+        notes: m.notes,
+      })) as Match[];
     },
 
     async save(match: Match): Promise<Match> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const dto = {
-            id: match.id,
-            team_id: match.teamId,
-            opponent: match.opponent,
-            date: match.date,
-            time: match.time,
-            location: match.location,
-            status: match.status,
-            goals_for: match.goalsFor !== undefined ? match.goalsFor : null,
-            goals_against: match.goalsAgainst !== undefined ? match.goalsAgainst : null,
-            scorers: match.scorers || null,
-            callup_ids: match.callupIds || null,
-            notes: match.notes || null,
-          };
-          const { error } = await client.from('matches').upsert(dto);
-          if (error) throw new Error(error.message);
-          return match;
-        }
-      }
-      // Local Storage
-      const allMatches = getLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, []);
-      const index = allMatches.findIndex((m) => m.id === match.id);
-      if (index >= 0) {
-        allMatches[index] = match;
-      } else {
-        allMatches.push(match);
-      }
-      setLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, allMatches);
+      const client = getSupabaseClient();
+      const dto = {
+        id: match.id,
+        team_id: match.teamId,
+        opponent: match.opponent,
+        date: match.date,
+        time: match.time,
+        location: match.location,
+        status: match.status,
+        goals_for: match.goalsFor !== undefined ? match.goalsFor : null,
+        goals_against: match.goalsAgainst !== undefined ? match.goalsAgainst : null,
+        scorers: match.scorers || null,
+        callup_ids: match.callupIds || null,
+        notes: match.notes || null,
+      };
+      const { error } = await client.from('matches').upsert(dto);
+      if (error) throw new Error(error.message);
       return match;
     },
 
     async delete(matchId: string): Promise<void> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { error } = await client.from('matches').delete().eq('id', matchId);
-          if (error) throw new Error(error.message);
-          return;
-        }
-      }
-      // Local Storage
-      let allMatches = getLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, []);
-      allMatches = allMatches.filter((m) => m.id !== matchId);
-      setLocalItem<Match[]>(LOCAL_STORAGE_KEYS.MATCHES, allMatches);
+      const client = getSupabaseClient();
+      const { error } = await client.from('matches').delete().eq('id', matchId);
+      if (error) throw new Error(error.message);
     },
   },
 
   // Tactics Management
   tactics: {
     async list(teamId: string): Promise<Tactic[]> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data, error } = await client
-            .from('tactics')
-            .select('*')
-            .eq('team_id', teamId);
-          if (error) {
-            console.error('Supabase tactics get failed:', error);
-          } else if (data) {
-            return data.map((t: any) => ({
-              id: t.id,
-              teamId: t.team_id,
-              name: t.name,
-              description: t.description,
-              sport: t.sport,
-              chips: t.chips,
-              lines: t.lines,
-              createdAt: t.created_at,
-              type: t.type || 'tactic',
-              rating: t.rating,
-              categories: t.categories || [],
-            })) as Tactic[];
-          }
-        }
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('tactics')
+        .select('*')
+        .eq('team_id', teamId);
+      if (error) {
+        console.error('Supabase tactics get failed:', error);
+        throw error;
       }
-      // Local Storage
-      const allTactics = getLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, []);
-      return allTactics.filter((t) => t.teamId === teamId);
+      return (data || []).map((t: any) => ({
+        id: t.id,
+        teamId: t.team_id,
+        name: t.name,
+        description: t.description,
+        sport: t.sport,
+        chips: t.chips,
+        lines: t.lines,
+        createdAt: t.created_at,
+        type: t.type || 'tactic',
+        rating: t.rating,
+        categories: t.categories || [],
+      })) as Tactic[];
     },
 
     async save(tactic: Tactic): Promise<Tactic> {
-      await delay(400);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const dto = {
-            id: tactic.id,
-            team_id: tactic.teamId,
-            name: tactic.name,
-            description: tactic.description || null,
-            sport: tactic.sport,
-            chips: tactic.chips,
-            lines: tactic.lines,
-            type: tactic.type,
-            rating: tactic.rating || null,
-            categories: tactic.categories || [],
-          };
-          const { error } = await client.from('tactics').upsert(dto);
-          if (error) throw new Error(error.message);
-          return tactic;
-        }
-      }
-      // Local Storage
-      const allTactics = getLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, []);
-      const index = allTactics.findIndex((t) => t.id === tactic.id);
-      if (index >= 0) {
-        allTactics[index] = tactic;
-      } else {
-        allTactics.push(tactic);
-      }
-      setLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, allTactics);
+      const client = getSupabaseClient();
+      const dto = {
+        id: tactic.id,
+        team_id: tactic.teamId,
+        name: tactic.name,
+        description: tactic.description || null,
+        sport: tactic.sport,
+        chips: tactic.chips,
+        lines: tactic.lines,
+        type: tactic.type,
+        rating: tactic.rating || null,
+        categories: tactic.categories || [],
+      };
+      const { error } = await client.from('tactics').upsert(dto);
+      if (error) throw new Error(error.message);
       return tactic;
     },
 
     async delete(tacticId: string): Promise<void> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { error } = await client.from('tactics').delete().eq('id', tacticId);
-          if (error) throw new Error(error.message);
-          return;
-        }
-      }
-      // Local Storage
-      let allTactics = getLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, []);
-      allTactics = allTactics.filter((t) => t.id !== tacticId);
-      setLocalItem<Tactic[]>(LOCAL_STORAGE_KEYS.TACTICS, allTactics);
+      const client = getSupabaseClient();
+      const { error } = await client.from('tactics').delete().eq('id', tacticId);
+      if (error) throw new Error(error.message);
     },
   },
 
   trainings: {
     async list(teamId: string): Promise<Training[]> {
-      await delay(200);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data } = await client.from('trainings').select('*').eq('team_id', teamId);
-          if (data) return data.map(t => ({
-            id: t.id,
-            teamId: t.team_id,
-            date: t.date,
-            title: t.title,
-            description: t.description,
-            intensity: t.intensity,
-            duration: t.duration,
-            type: t.type,
-            focusItems: t.focus_items,
-            notes: t.notes,
-            status: t.status,
-            votes: t.votes || {}
-          })) as Training[];
-        }
+      const client = getSupabaseClient();
+      const { data, error } = await client.from('trainings').select('*').eq('team_id', teamId);
+      if (error) {
+        console.error('Supabase trainings get failed:', error);
+        throw error;
       }
-      return getLocalItem<Training[]>(LOCAL_STORAGE_KEYS.TRAININGS, []).filter(t => t.teamId === teamId);
+      return (data || []).map(t => ({
+        id: t.id,
+        teamId: t.team_id,
+        date: t.date,
+        title: t.title,
+        description: t.description,
+        intensity: t.intensity,
+        duration: t.duration,
+        type: t.type,
+        focusItems: t.focus_items,
+        notes: t.notes,
+        status: t.status,
+        votes: t.votes || {}
+      })) as Training[];
     },
     async save(training: Training): Promise<Training> {
-      await delay(300);
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const dto = {
-            id: training.id,
-            team_id: training.teamId,
-            date: training.date,
-            title: training.title,
-            description: training.description,
-            intensity: training.intensity,
-            duration: training.duration,
-            type: training.type,
-            focus_items: training.focusItems,
-            notes: training.notes,
-            status: training.status,
-            votes: training.votes || {},
-          };
-          await client.from('trainings').upsert(dto);
-        }
-      }
-      const all = getLocalItem<Training[]>(LOCAL_STORAGE_KEYS.TRAININGS, []);
-      const idx = all.findIndex(t => t.id === training.id);
-      if (idx >= 0) all[idx] = training; else all.push(training);
-      setLocalItem(LOCAL_STORAGE_KEYS.TRAININGS, all);
+      const client = getSupabaseClient();
+      const dto = {
+        id: training.id,
+        team_id: training.teamId,
+        date: training.date,
+        title: training.title,
+        description: training.description,
+        intensity: training.intensity,
+        duration: training.duration,
+        type: training.type,
+        focus_items: training.focusItems,
+        notes: training.notes,
+        status: training.status,
+        votes: training.votes || {},
+      };
+      const { error } = await client.from('trainings').upsert(dto);
+      if (error) throw new Error(error.message);
       return training;
     },
     async vote(trainingId: string, userId: string, type: 'up' | 'down') {
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data } = await client.from('trainings').select('votes').eq('id', trainingId).single();
-          const votes = (data?.votes || {}) as Record<string, 'up' | 'down'>;
-          votes[userId] = type;
-          await client.from('trainings').update({ votes }).eq('id', trainingId);
-        }
-      }
-      const all = getLocalItem<Training[]>(LOCAL_STORAGE_KEYS.TRAININGS, []);
-      const t = all.find(x => x.id === trainingId);
-      if (t) {
-        if (!t.votes) t.votes = {};
-        t.votes[userId] = type;
-        setLocalItem(LOCAL_STORAGE_KEYS.TRAININGS, all);
-      }
+      const client = getSupabaseClient();
+      const { data, error: selectError } = await client.from('trainings').select('votes').eq('id', trainingId).single();
+      if (selectError) throw selectError;
+      const votes = (data?.votes || {}) as Record<string, 'up' | 'down'>;
+      votes[userId] = type;
+      const { error: updateError } = await client.from('trainings').update({ votes }).eq('id', trainingId);
+      if (updateError) throw updateError;
     }
   },
 
   requests: {
     async listByTeam(teamId: string): Promise<JoinRequest[]> {
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data } = await client.from('join_requests').select('*').eq('team_id', teamId);
-          if (data) return data.map(r => ({
-            id: r.id,
-            userId: r.user_id,
-            userEmail: r.user_email,
-            teamId: r.team_id,
-            playerName: r.player_name,
-            status: r.status,
-            createdAt: r.created_at
-          })) as JoinRequest[];
-        }
-      }
-      return getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []).filter(r => r.teamId === teamId);
+      const client = getSupabaseClient();
+      const { data, error } = await client.from('join_requests').select('*').eq('team_id', teamId);
+      if (error) throw error;
+      return (data || []).map(r => ({
+        id: r.id,
+        userId: r.user_id,
+        userEmail: r.user_email,
+        teamId: r.team_id,
+        playerName: r.player_name,
+        status: r.status,
+        createdAt: r.created_at
+      })) as JoinRequest[];
     },
     async listByUser(userId: string): Promise<JoinRequest[]> {
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data } = await client.from('join_requests').select('*').eq('user_id', userId);
-          if (data) return data.map(r => ({
-            id: r.id,
-            userId: r.user_id,
-            userEmail: r.user_email,
-            teamId: r.team_id,
-            playerName: r.player_name,
-            status: r.status,
-            createdAt: r.created_at
-          })) as JoinRequest[];
-        }
-      }
-      return getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []).filter(r => r.userId === userId);
+      const client = getSupabaseClient();
+      const { data, error } = await client.from('join_requests').select('*').eq('user_id', userId);
+      if (error) throw error;
+      return (data || []).map(r => ({
+        id: r.id,
+        userId: r.user_id,
+        userEmail: r.user_email,
+        teamId: r.team_id,
+        playerName: r.player_name,
+        status: r.status,
+        createdAt: r.created_at
+      })) as JoinRequest[];
     },
     async create(req: JoinRequest) {
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          await client.from('join_requests').insert({
-            id: req.id,
-            user_id: req.userId,
-            user_email: req.userEmail,
-            team_id: req.teamId,
-            player_name: req.playerName,
-            status: req.status,
-            created_at: req.createdAt
-          });
-        }
-      }
-      const all = getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []);
-      all.push(req);
-      setLocalItem(LOCAL_STORAGE_KEYS.REQUESTS, all);
+      const client = getSupabaseClient();
+      const { error } = await client.from('join_requests').insert({
+        id: req.id,
+        user_id: req.userId,
+        user_email: req.userEmail,
+        team_id: req.teamId,
+        player_name: req.playerName,
+        status: req.status,
+        created_at: req.createdAt
+      });
+      if (error) throw error;
     },
     async respond(id: string, status: 'accepted' | 'declined') {
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          await client.from('join_requests').update({ status }).eq('id', id);
-        }
-      }
-      const all = getLocalItem<JoinRequest[]>(LOCAL_STORAGE_KEYS.REQUESTS, []);
-      const r = all.find(x => x.id === id);
-      if (r) {
-        r.status = status;
-        setLocalItem(LOCAL_STORAGE_KEYS.REQUESTS, all);
-      }
+      const client = getSupabaseClient();
+      const { error } = await client.from('join_requests').update({ status }).eq('id', id);
+      if (error) throw error;
     }
   },
 
   global: {
     async listAllTeams(): Promise<Team[]> {
-      if (isSupabaseActive()) {
-        const client = getSupabaseClient();
-        if (client) {
-          const { data } = await client.from('teams').select('*');
-          if (data) return data.map(t => ({
-            id: t.id,
-            userId: t.user_id,
-            name: t.name,
-            sport: t.sport,
-            primaryColor: t.primary_color,
-            secondaryColor: t.secondary_color,
-            createdAt: t.created_at,
-            customStatsConfig: t.custom_stats_config
-          })) as Team[];
-        }
-      }
-      return getLocalItem<Team[]>(LOCAL_STORAGE_KEYS.TEAMS, []);
+      const client = getSupabaseClient();
+      const { data, error } = await client.from('teams').select('*');
+      if (error) throw error;
+      return (data || []).map(t => ({
+        id: t.id,
+        userId: t.user_id,
+        name: t.name,
+        sport: t.sport,
+        primaryColor: t.primary_color,
+        secondaryColor: t.secondary_color,
+        createdAt: t.created_at,
+        customStatsConfig: t.custom_stats_config
+      })) as Team[];
     }
   }
 };

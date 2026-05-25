@@ -12,16 +12,12 @@ interface TeamSelectorProps {
   userId: string;
   onTeamSelected: (team: Team) => void;
   onLogOut: () => void;
-  onToggleSupabaseSettings: () => void;
-  showSupabaseIcon?: boolean;
 }
 
 export default function TeamSelector({
   userId,
   onTeamSelected,
-  onLogOut,
-  onToggleSupabaseSettings,
-  showSupabaseIcon = false
+  onLogOut
 }: TeamSelectorProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,18 +111,6 @@ export default function TeamSelector({
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={onToggleSupabaseSettings}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-lg border transition ${
-              showSupabaseIcon 
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                : 'bg-[#161b26] border-slate-800 text-slate-300 hover:text-white'
-            }`}
-          >
-            <Settings2 className="w-3.5 h-3.5" />
-            <span>Configurar Supabase</span>
-          </button>
-
           <button
             onClick={onLogOut}
             className="flex items-center gap-1.5 text-xs font-semibold bg-red-950/20 hover:bg-red-900/30 border border-red-900/35 text-red-400 px-4 py-2.5 rounded-lg transition"

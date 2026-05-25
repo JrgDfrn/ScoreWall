@@ -5,9 +5,8 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Dumbbell, ShieldAlert, KeyRound, Mail, ArrowRight, Database, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ShieldAlert, KeyRound, Mail, ArrowRight } from 'lucide-react';
 import { DB } from '../db';
-import SupabaseConfigPanel from './SupabaseConfigPanel';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: { id: string; email: string }) => void;
@@ -19,8 +18,6 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [showConfig, setShowConfig] = useState(false);
-  const [isSupbActive, setIsSupbActive] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,20 +37,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         onLoginSuccess(user);
       }
     } catch (e: any) {
-      setErrorMsg(e.message || 'Error en la autenticación. Inténtalo de nuevo.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickDemo = async () => {
-    setLoading(true);
-    setErrorMsg('');
-    try {
-      const demoUser = await DB.auth.signIn('coach.demo@sporttactics.com', 'admin1234');
-      onLoginSuccess(demoUser);
-    } catch (e: any) {
-      setErrorMsg('Error al arrancar el modo demo.');
+      setErrorMsg(e.message || 'Error en la autenticación. Revisa tus credenciales.');
     } finally {
       setLoading(false);
     }
@@ -152,47 +136,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Option */}
-          <div className="relative my-6 flex items-center justify-center">
-            <div className="border-t border-slate-800/80 w-full"></div>
-            <span className="bg-[#161b26] px-3 text-[10px] uppercase tracking-widest text-slate-500 font-extrabold absolute">
-              O PRUEBA AL INSTANTE
-            </span>
-          </div>
-
-          <button
-            onClick={handleQuickDemo}
-            disabled={loading}
-            className="w-full bg-[#0b0e14]/85 hover:bg-[#0b0e14] border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-medium text-xs py-3 rounded-xl transition flex items-center justify-center gap-2 shadow"
-          >
-            <span className="w-2 h-2 rounded-full bg-[#10b981] inline-block animate-pulse"></span>
-            <span>Acceder en Modo Demo Local (Sin Cuenta)</span>
-          </button>
         </motion.div>
-
-        {/* Supabase Config Selector Toggle */}
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => setShowConfig(!showConfig)}
-            className="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-white transition py-1.5 px-3 rounded-lg bg-[#161b26] border border-slate-800"
-          >
-            <Database className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Configuración del Servidor</span>
-            {showConfig ? <ToggleRight className="w-4 h-4 text-indigo-500" /> : <ToggleLeft className="w-4 h-4" />}
-          </button>
-        </div>
       </div>
-
-      {showConfig && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-4xl mt-6 z-10 px-4"
-        >
-          <SupabaseConfigPanel onConfigChanged={() => setIsSupbActive(!isSupbActive)} />
-        </motion.div>
-      )}
     </div>
   );
 }

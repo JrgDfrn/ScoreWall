@@ -15,7 +15,6 @@ import MatchesManager from './components/MatchesManager';
 import TeamSearch from './components/TeamSearch';
 import PlayerDashboard from './components/PlayerDashboard';
 import JoinRequestsManager from './components/JoinRequestsManager';
-import SupabaseConfigPanel from './components/SupabaseConfigPanel';
 import { Shield, Waves, ChevronLeft, Calendar, Users, LayoutDashboard, Database, Info, Dumbbell, LogOut, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -26,7 +25,6 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'coach' | 'player'>('coach');
   const [activeTeam, setActiveTeam] = useState<Team | null>(null);
   const [activeTab, setActiveTab] = useState<'whiteboard' | 'trainings' | 'players' | 'matches'>('whiteboard');
-  const [showSbConfig, setShowSbConfig] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSupbConnected, setIsSupbConnected] = useState(false);
   const [selectedTacticId, setSelectedTacticId] = useState<string | null>(null);
@@ -243,7 +241,6 @@ export default function App() {
                          setActiveTab('whiteboard');
                        }} 
                        onLogOut={handleLogOut}
-                       onToggleSupabaseSettings={() => setShowSbConfig(!showSbConfig)}
                     />
                   </div>
                 ) : (
@@ -303,16 +300,6 @@ export default function App() {
            </div>
         </main>
 
-        {showSbConfig && (
-          <div className="fixed inset-0 z-[100] bg-[#0b0e14]/90 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-sm">
-              <SupabaseConfigPanel 
-                onClose={() => setShowSbConfig(false)} 
-                onConfigChanged={() => setIsSupbConnected(isSupabaseActive())}
-              />
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -321,18 +308,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0b0e14] text-slate-200 font-sans selection:bg-indigo-500/30 selection:text-white flex flex-col leading-relaxed">
       
-      <div className="bg-[#161b26] border-b border-slate-800 py-2 px-4 text-center text-[10px] flex items-center justify-center gap-1.5 font-medium leading-none text-slate-400 z-50">
-        {isSupbConnected ? (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Servicio en la nube activo: Conectado a Supabase en tiempo real.</span>
-          </>
-        ) : (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
-            <span>Ejecutando en Modo Autónomo: Datos almacenados de forma segura en tu navegador local.</span>
-          </>
-        )}
+      <div className="bg-indigo-600/10 border-b border-indigo-500/10 py-2 px-4 text-center text-[10px] flex items-center justify-center gap-1.5 font-medium leading-none text-indigo-400 z-50">
+        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+        <span>Sincronización en la nube activa • Base de Datos de Alto Rendimiento</span>
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-[calc(100vh-32px)]">
