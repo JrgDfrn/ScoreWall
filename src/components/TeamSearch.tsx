@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Team, JoinRequest } from '../types';
-import { DB } from '../db';
+import { DB, getDeterministicCode } from '../db';
 import { Search, MapPin, Users, Send, Clock, CheckCircle, XCircle } from 'lucide-react';
 
 interface TeamSearchProps {
@@ -15,8 +15,23 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [myRequests, setMyRequests] = useState<JoinRequest[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [requestingTeamId, setRequestingTeamId] = useState<string | null>(null);
   const [playerName, setPlayerName] = useState('');
+  const [enteredCode, setEnteredCode] = useState('');
+
+  useEffect(() => {
+    if (!userId) {
+      setDismissedIds([]);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(`dismissed_requests_${userId}`);
+      setDismissedIds(saved ? JSON.parse(saved) : []);
+    } catch {
+      setDismissedIds([]);
+    }
+  }, [userId]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,6 +58,19 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
   const handleRequest = async (teamId: string) => {
     if (!playerName.trim()) return;
 
+    const targetTeam = teams.find(t => t.id === teamId);
+    const expectedCode = targetTeam?.accessCode || getDeterministicCode(teamId);
+    if (enteredCode.trim() !== expectedCode) {
+      alert('¡Código de acceso incorrecto! Introduce el código de 6 dígitos correcto proporcionado por tu entrenador.');
+      return;
+    }
+
+    const teamRequests = myRequests.filter(r => r.teamId === teamId);
+    if (teamRequests.length >= 5) {
+      alert('Has alcanzado el límite de 5 solicitudes para este mismo equipo.');
+      return;
+    }
+
     const request: JoinRequest = {
       id: crypto.randomUUID(),
       userId,
@@ -58,9 +86,26 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
       setMyRequests(prev => [...prev, request]);
       setRequestingTeamId(null);
       setPlayerName('');
+      setEnteredCode('');
       onJoinRequested();
     } catch (err) {
       console.error('Error creating request:', err);
+    }
+  };
+
+  const handleDismissRequest = async (requestId: string) => {
+    try {
+      const updated = [...dismissedIds, requestId];
+      setDismissedIds(updated);
+      try {
+        localStorage.setItem(`dismissed_requests_${userId}`, JSON.stringify(updated));
+      } catch (locErr) {
+        console.warn('LocalStorage error:', locErr);
+      }
+      await DB.requests.delete(requestId);
+      setMyRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (err) {
+      console.error('Error dismissing request:', err);
     }
   };
 
@@ -98,51 +143,71 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
       </div>
 
       {/* MY REQUESTS SECTION */}
-      {myRequests.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 border-l-2 border-indigo-500 pl-3">Tus Solicitudes</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {myRequests.map(req => {
-              const team = teams.find(t => t.id === req.teamId);
-              return (
-                <div key={req.id} className="bg-[#161b26]/50 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
-                  <div className="space-y-1">
-                    <p className="text-sm font-bold text-white">{team?.name || 'Equipo Desconocido'}</p>
-                    <p className="text-[10px] text-slate-500">Como: <span className="text-slate-300">{req.playerName}</span></p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {req.status === 'pending' && (
-                      <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase">
-                        <Clock className="w-3 h-3" /> Pendiente
-                      </span>
-                    )}
-                    {req.status === 'accepted' && (
-                      <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase">
-                          <CheckCircle className="w-3 h-3" /> Aceptado
+      {(() => {
+        const visibleRequests = myRequests.filter(r => !dismissedIds.includes(r.id));
+        if (visibleRequests.length === 0) return null;
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 border-l-2 border-indigo-500 pl-3">Tus Solicitudes</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {visibleRequests.map(req => {
+                const team = teams.find(t => t.id === req.teamId);
+                return (
+                  <div key={req.id} className="bg-[#161b26]/50 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-white">{team?.name || 'Equipo Desconocido'}</p>
+                      <p className="text-[10px] text-slate-500">Como: <span className="text-slate-300">{req.playerName}</span></p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {req.status === 'pending' && (
+                        <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase">
+                          <Clock className="w-3 h-3" /> Pendiente
                         </span>
-                        {team && (
+                      )}
+                      {req.status === 'accepted' && (
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase">
+                            <CheckCircle className="w-3 h-3" /> Aceptado
+                          </span>
+                          {team && (
+                            <button
+                              onClick={() => onSelectTeam(team)}
+                              className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase transition-all"
+                            >
+                              Entrar
+                            </button>
+                          )}
                           <button
-                            onClick={() => onSelectTeam(team)}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase transition-all"
+                            onClick={() => handleDismissRequest(req.id)}
+                            className="bg-slate-850 hover:bg-slate-800 text-slate-500 hover:text-white border border-slate-800 w-6 h-6 rounded flex items-center justify-center text-xs transition duration-200"
+                            title="Quitar de mi lista"
                           >
-                            Entrar
+                            ×
                           </button>
-                        )}
-                      </div>
-                    )}
-                    {req.status === 'declined' && (
-                      <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-500 text-[10px] font-black uppercase">
-                        <XCircle className="w-3 h-3" /> Rechazado
-                      </span>
-                    )}
+                        </div>
+                      )}
+                      {req.status === 'declined' && (
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 text-rose-500 text-[10px] font-black uppercase">
+                            <XCircle className="w-3 h-3" /> Rechazado
+                          </span>
+                          <button
+                            onClick={() => handleDismissRequest(req.id)}
+                            className="bg-slate-850 hover:bg-slate-800 text-slate-500 hover:text-white border border-slate-800 w-6 h-6 rounded flex items-center justify-center text-xs transition duration-200"
+                            title="Quitar de mi lista"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TEAMS LIST */}
       <div className="space-y-4">
@@ -154,7 +219,9 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
             </div>
           ) : (
             filteredTeams.map(team => {
-              const alreadyRequested = myRequests.some(r => r.teamId === team.id);
+              const teamReqs = myRequests.filter(r => r.teamId === team.id);
+              const requestCount = teamReqs.length;
+              const hasReachedLimit = requestCount >= 5;
               const isRequesting = requestingTeamId === team.id;
 
               return (
@@ -182,7 +249,7 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
                     {isRequesting ? (
                       <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                         <div className="space-y-1">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Tu Nombre en la Ficha</label>
+                          <label className="text-[9px] font-black uppercase tracking-widest text-[#94a3b8] ml-1">Tu Nombre en la Ficha</label>
                           <input 
                             autoFocus
                             value={playerName}
@@ -191,15 +258,29 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
                             className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-700"
                           />
                         </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-widest text-[#94a3b8] ml-1">Código de Acceso del Equipo (6 dígitos)</label>
+                          <input 
+                            value={enteredCode}
+                            onChange={(e) => setEnteredCode(e.target.value.substring(0, 6))}
+                            placeholder="Introduce el código de 6 dígitos"
+                            className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-700 font-mono tracking-wider"
+                          />
+                        </div>
                         <div className="flex gap-2">
                           <button 
-                            onClick={() => setRequestingTeamId(null)}
+                            type="button"
+                            onClick={() => {
+                              setRequestingTeamId(null);
+                              setEnteredCode('');
+                            }}
                             className="flex-1 py-2 text-[10px] font-black uppercase text-slate-500 hover:text-white transition"
                           >
                             Cancelar
                           </button>
                           <button 
-                            disabled={!playerName.trim()}
+                            type="button"
+                            disabled={!playerName.trim() || enteredCode.trim().length !== 6}
                             onClick={() => handleRequest(team.id)}
                             className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white py-2 px-4 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-indigo-900/20 transition-all flex items-center justify-center gap-2"
                           >
@@ -209,16 +290,18 @@ export default function TeamSearch({ userId, userEmail, onJoinRequested, onSelec
                       </div>
                     ) : (
                       <button 
-                        disabled={alreadyRequested}
+                        disabled={hasReachedLimit}
                         onClick={() => setRequestingTeamId(team.id)}
                         className={`w-full py-3.5 px-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-                          alreadyRequested
+                          hasReachedLimit
                             ? 'bg-[#0b0e14] text-slate-600 cursor-not-allowed border border-slate-800'
                             : 'bg-white text-black hover:bg-slate-200 shadow-xl'
                         }`}
                       >
-                        {alreadyRequested ? (
-                          <>SOLICITADO</>
+                        {hasReachedLimit ? (
+                          <>LÍMITE ALCANZADO (5/5)</>
+                        ) : requestCount > 0 ? (
+                          <>Volver a Solicitar ({requestCount}/5)</>
                         ) : (
                           <>Solicitar Unión</>
                         )}

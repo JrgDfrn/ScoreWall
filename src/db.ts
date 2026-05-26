@@ -15,6 +15,18 @@ export function generateUUID(): string {
   });
 }
 
+// Generates a deterministic, unique 6-digit code from any team ID
+export function getDeterministicCode(teamId: string): string {
+  let hash = 0;
+  for (let i = 0; i < teamId.length; i++) {
+    const char = teamId.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const codeValue = (Math.abs(hash) % 900000) + 100000;
+  return codeValue.toString();
+}
+
 // 1. Detect Config from Environment
 const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const ENV_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -78,7 +90,8 @@ create table if not exists public.teams (
   primary_color text not null,
   secondary_color text not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  custom_stats_config jsonb default '[]'::jsonb
+  custom_stats_config jsonb default '[]'::jsonb,
+  access_code text default '123456'
 );
 
 -- 2. Tabla de Jugadores (players)
@@ -228,6 +241,7 @@ export const DB = {
         secondaryColor: t.secondary_color,
         createdAt: t.created_at,
         customStatsConfig: t.custom_stats_config,
+        accessCode: t.access_code || getDeterministicCode(t.id),
       })) as Team[];
     },
 
@@ -241,10 +255,11 @@ export const DB = {
         primary_color: team.primaryColor,
         secondary_color: team.secondaryColor,
         custom_stats_config: team.customStatsConfig || [],
+        access_code: team.accessCode || getDeterministicCode(team.id),
       };
       const { error } = await client.from('teams').upsert(dto);
       if (error) throw new Error(error.message);
-      return team;
+      return { ...team, accessCode: dto.access_code };
     },
 
     async delete(teamId: string): Promise<void> {
@@ -515,6 +530,11 @@ export const DB = {
       const client = getSupabaseClient();
       const { error } = await client.from('join_requests').update({ status }).eq('id', id);
       if (error) throw error;
+    },
+    async delete(id: string) {
+      const client = getSupabaseClient();
+      const { error } = await client.from('join_requests').delete().eq('id', id);
+      if (error) throw error;
     }
   },
 
@@ -531,7 +551,8 @@ export const DB = {
         primaryColor: t.primary_color,
         secondaryColor: t.secondary_color,
         createdAt: t.created_at,
-        customStatsConfig: t.custom_stats_config
+        customStatsConfig: t.custom_stats_config,
+        accessCode: t.access_code || getDeterministicCode(t.id)
       })) as Team[];
     }
   }

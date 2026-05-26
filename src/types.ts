@@ -20,6 +20,7 @@ export interface Team {
   primaryColor: string;
   secondaryColor: string;
   createdAt: string;
+  accessCode?: string;
   customStatsConfig?: CustomStatDefinition[]; // Dynamically added stat metrics
 }
 

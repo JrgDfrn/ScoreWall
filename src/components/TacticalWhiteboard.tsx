@@ -13,9 +13,10 @@ interface TacticalWhiteboardProps {
   initialTacticId?: string;
   initialFullscreen?: boolean;
   onExit?: () => void;
+  isReadOnly?: boolean;
 }
 
-export default function TacticalWhiteboard({ team, initialTacticId, initialFullscreen, onExit }: TacticalWhiteboardProps) {
+export default function TacticalWhiteboard({ team, initialTacticId, initialFullscreen, onExit, isReadOnly = false }: TacticalWhiteboardProps) {
   const [tactics, setTactics] = useState<Tactic[]>([]);
   const [selectedTacticId, setSelectedTacticId] = useState<string>('');
   const [boardName, setBoardName] = useState('Pizarra de Tácticas');
@@ -139,10 +140,11 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
     setLines(tactic.lines);
   };
 
-  // Convert pixel coordinates of the click, trace back to 0-100 percentages matching container sizing
+  // Convert pixel coordinates of the click, trace back to 0-100 percentages matching canvas sizing
   const getRelativeCoords = (clientX: number, clientY: number) => {
-    if (!containerRef.current) return { x: 0, y: 0 };
-    const rect = containerRef.current.getBoundingClientRect();
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
     const x = ((clientX - rect.left) / rect.width) * 100;
     const y = ((clientY - rect.top) / rect.height) * 100;
     return { x, y };
@@ -180,6 +182,8 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       ctx.beginPath();
       ctx.strokeStyle = line.color;
       ctx.lineWidth = line.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
       if (line.style === 'dashed') {
         ctx.setLineDash([8, 6]);
@@ -263,6 +267,7 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
 
   // Pointer event drawing handlers for 0ms lag
   const handleCanvasStart = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (isReadOnly) return;
     if (draggingChipId) return; // ignore if moving a chip instead
     e.preventDefault();
     try {
@@ -271,9 +276,9 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       console.warn('Pointer capture warn:', err);
     }
     const startPos = getRelativeCoords(e.clientX, e.clientY);
+    isDrawingRef.current = true;
     
     if (isErasing) {
-      isDrawingRef.current = true;
       // Immediate erase at start point
       setLines((prev) => prev.filter((line) => {
         for (let i = 0; i < line.points.length - 1; i++) {
@@ -284,15 +289,16 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       return;
     }
 
+    activeLinePointsRef.current = [startPos];
     setCurrentLinePoints([startPos]);
   };
 
   const handleCanvasMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.preventDefault();
+    if (!isDrawingRef.current) return;
     const currentPos = getRelativeCoords(e.clientX, e.clientY);
 
     if (isErasing) {
-      if (!isDrawingRef.current) return;
       // Continuous erasing
       setLines((prev) => prev.filter((line) => {
         for (let i = 0; i < line.points.length - 1; i++) {
@@ -303,11 +309,15 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       return;
     }
 
-    if (!currentLinePoints) return;
-    const lastPos = currentLinePoints[currentLinePoints.length - 1];
+    const points = activeLinePointsRef.current;
+    if (points.length === 0) return;
+    const lastPos = points[points.length - 1];
     // Throttle close points to avoid jitter
     if (lastPos && Math.hypot(currentPos.x - lastPos.x, currentPos.y - lastPos.y) < 0.25) return;
-    setCurrentLinePoints((prev) => (prev ? [...prev, currentPos] : [currentPos]));
+    
+    const newPoints = [...points, currentPos];
+    activeLinePointsRef.current = newPoints;
+    setCurrentLinePoints(newPoints);
   };
 
   const handleCanvasEnd = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -320,20 +330,23 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       // capture might not exist
     }
 
+    if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
 
     if (isErasing) return;
 
-    if (currentLinePoints && currentLinePoints.length >= 2) {
+    const points = activeLinePointsRef.current;
+    if (points && points.length >= 2) {
       const newLine: LineDrawState = {
         id: 'line-' + Date.now().toString(),
-        points: [...currentLinePoints],
+        points: [...points],
         color: brushColor,
         width: brushWidth,
         style: brushStyle,
       };
       setLines((prev) => [...prev, newLine]);
     }
+    activeLinePointsRef.current = [];
     setCurrentLinePoints(null);
   };
 
@@ -410,27 +423,47 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
 
   // Moving chips around the board
   const handleChipDragStart = (id: string) => {
+    if (isReadOnly) return;
     setDraggingChipId(id);
   };
 
-  const updateChipPosition = (clientX: number, clientY: number) => {
+  useEffect(() => {
     if (!draggingChipId) return;
-    const { x, y } = getRelativeCoords(clientX, clientY);
 
-    setChips((prev) =>
-      prev.map((c) => {
-        if (c.id === draggingChipId) {
-          // Clamp values to keep chips on screen
-          return {
-            ...c,
-            x: Math.min(Math.max(x, 2), 98),
-            y: Math.min(Math.max(y, 2), 98),
-          };
-        }
-        return c;
-      })
-    );
-  };
+    const handlePointerMove = (e: PointerEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+      setChips((prev) =>
+        prev.map((c) => {
+          if (c.id === draggingChipId) {
+            // Clamp values to keep chips on screen
+            return {
+              ...c,
+              x: Math.min(Math.max(x, 2), 98),
+              y: Math.min(Math.max(y, 2), 98),
+            };
+          }
+          return c;
+        })
+      );
+    };
+
+    const handlePointerUp = () => {
+      setDraggingChipId(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [draggingChipId]);
 
   const handleChipRemove = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -519,11 +552,13 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       className={
         isBoardFullscreen
           ? "fixed inset-0 z-[100] bg-[#070a0f] p-0 overflow-hidden flex flex-col animate-fade-in"
-          : "grid grid-cols-1 xl:grid-cols-4 gap-6 p-4 animate-fade-in"
+          : isReadOnly
+            ? "w-full max-w-4xl mx-auto p-2 md:p-4 animate-fade-in flex flex-col items-center"
+            : "grid grid-cols-1 xl:grid-cols-4 gap-6 p-4 animate-fade-in"
       }
     >
       {/* 1. Left controls & saved tactics list */}
-      {!isBoardFullscreen && (
+      {!isReadOnly && !isBoardFullscreen && (
         <div className="xl:col-span-1 space-y-4">
           
           {/* Jugada Loader Selector */}
@@ -794,63 +829,80 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
       )}
 
       {/* 2. WHITEBOARD DRAWING STAGE (STADIUM COURT) */}
-      <div className={`${isBoardFullscreen ? "flex-1 w-full h-full relative flex flex-col items-center overflow-hidden" : "xl:col-span-2 flex flex-col items-center"}`}>
+      <div className={`${
+        isBoardFullscreen 
+          ? "flex-1 w-full h-full relative flex flex-col items-center overflow-hidden" 
+          : isReadOnly
+            ? "w-full max-w-4xl flex flex-col items-center gap-4"
+            : "xl:col-span-2 flex flex-col items-center"
+      }`}>
         
         {/* Fullscreen Tools Header */}
         {isBoardFullscreen && (
           <div className="w-full bg-[#161b26]/95 backdrop-blur-xl border-b border-white/5 py-3 px-6 flex items-center justify-between z-[120] shrink-0 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 p-1 bg-[#0b0e14] rounded-xl border border-slate-800">
-                <button
-                  onClick={() => setIsErasing(false)}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition ${!isErasing ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                  title="Lápiz"
-                >
-                  <Brush className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setIsErasing(!isErasing)}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition ${isErasing ? 'bg-rose-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                  title="Borrador"
-                >
-                  <Eraser className="w-4 h-4" />
-                </button>
+            {isReadOnly ? (
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
+                <span className="text-xs font-black uppercase tracking-widest text-[#06b6d4] italic">
+                  Vista Táctica: {boardName || 'Entrenamiento'}
+                </span>
               </div>
-
-              {!isErasing && (
-                <div className="hidden lg:flex items-center gap-1.5 p-1 bg-[#0b0e14] rounded-xl border border-slate-800">
-                  {['solid', 'dashed', 'arrow'].map((style) => (
-                    <button
-                      key={style}
-                      onClick={() => setBrushStyle(style as any)}
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center transition ${brushStyle === style ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white'}`}
-                    >
-                      {style === 'solid' && <div className="w-4 h-0.5 bg-current" />}
-                      {style === 'dashed' && <div className="w-4 h-0.5 border-t-2 border-dashed border-current" />}
-                      {style === 'arrow' && <div className="w-4 h-4 border-r-2 border-t-2 border-current rotate-45 translate-x-[-1px] translate-y-[1px]" />}
-                    </button>
-                  ))}
-                  <div className="w-px h-5 bg-slate-800 mx-1" />
-                  {['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#ffffff'].map((col) => (
-                    <button
-                      key={col}
-                      onClick={() => setBrushColor(col)}
-                      className={`w-5 h-5 rounded-full border-2 transition ${brushColor === col ? 'scale-110 border-white' : 'border-transparent hover:scale-110'}`}
-                      style={{ backgroundColor: col }}
-                    />
-                  ))}
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 p-1 bg-[#0b0e14] rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => setIsErasing(false)}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition ${!isErasing ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                    title="Lápiz"
+                  >
+                    <Brush className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsErasing(!isErasing)}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition ${isErasing ? 'bg-rose-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                    title="Borrador"
+                  >
+                    <Eraser className="w-4 h-4" />
+                  </button>
                 </div>
-              )}
-            </div>
+
+                {!isErasing && (
+                  <div className="hidden lg:flex items-center gap-1.5 p-1 bg-[#0b0e14] rounded-xl border border-slate-800">
+                    {['solid', 'dashed', 'arrow'].map((style) => (
+                      <button
+                        key={style}
+                        onClick={() => setBrushStyle(style as any)}
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition ${brushStyle === style ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-white'}`}
+                      >
+                        {style === 'solid' && <div className="w-4 h-0.5 bg-current" />}
+                        {style === 'dashed' && <div className="w-4 h-0.5 border-t-2 border-dashed border-current" />}
+                        {style === 'arrow' && <div className="w-4 h-4 border-r-2 border-t-2 border-current rotate-45 translate-x-[-1px] translate-y-[1px]" />}
+                      </button>
+                    ))}
+                    <div className="w-px h-5 bg-slate-800 mx-1" />
+                    {['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#ffffff'].map((col) => (
+                      <button
+                        key={col}
+                        onClick={() => setBrushColor(col)}
+                        className={`w-5 h-5 rounded-full border-2 transition ${brushColor === col ? 'scale-110 border-white' : 'border-transparent hover:scale-110'}`}
+                        style={{ backgroundColor: col }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-tight transition-all ${isQuickAddOpen ? 'bg-indigo-600 text-white shadow-lg' : 'bg-[#0b0e14] text-indigo-400 border border-slate-800 hover:bg-slate-800'}`}
-              >
-                <Users className="w-4 h-4" />
-                <span>Jugadores</span>
-              </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-tight transition-all ${isQuickAddOpen ? 'bg-indigo-600 text-white shadow-lg' : 'bg-[#0b0e14] text-indigo-400 border border-slate-800 hover:bg-slate-800'}`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Jugadores</span>
+                </button>
+              )}
               <button
                 onClick={() => setFieldOrientation(prev => prev === 'vertical' ? 'horizontal' : 'vertical')}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0b0e14] border border-slate-800 text-emerald-400 hover:bg-slate-800 transition-all font-bold text-xs uppercase"
@@ -858,19 +910,25 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
                 <RotateCcw className="w-4 h-4" />
                 <span className="hidden sm:inline">Girar</span>
               </button>
-              <div className="w-px h-6 bg-slate-800 mx-1" />
-              <button
-                onClick={() => setLines([])}
-                className="px-4 py-2 rounded-xl bg-red-950/20 border border-red-900/30 text-red-500 text-xs font-black uppercase hover:bg-red-900/40 transition"
-              >
-                Limpiar
-              </button>
-              <button
-                onClick={handleSaveTactic}
-                className="px-6 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase hover:bg-indigo-500 transition shadow-lg shadow-indigo-900/40"
-              >
-                Guardar
-              </button>
+              
+              {!isReadOnly && (
+                <>
+                  <div className="w-px h-6 bg-slate-800 mx-1" />
+                  <button
+                    onClick={() => setLines([])}
+                    className="px-4 py-2 rounded-xl bg-red-950/20 border border-red-900/30 text-red-500 text-xs font-black uppercase hover:bg-red-900/40 transition"
+                  >
+                    Limpiar
+                  </button>
+                  <button
+                    onClick={handleSaveTactic}
+                    className="px-6 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase hover:bg-indigo-500 transition shadow-lg shadow-indigo-900/40"
+                  >
+                    Guardar
+                  </button>
+                </>
+              )}
+              
               <button
                 onClick={toggleFullscreen}
                 className="px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-black uppercase hover:bg-slate-700 transition"
@@ -1003,10 +1061,6 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
         {/* Interactive canvas stage */}
         <div
           ref={containerRef}
-          onPointerDown={handleCanvasStart}
-          onPointerMove={handleCanvasMove}
-          onPointerUp={handleCanvasEnd}
-          onPointerLeave={handleCanvasEnd}
           className={`flex-1 w-full relative overflow-hidden bg-[#070a0f] flex items-center justify-center ${isBoardFullscreen ? "p-4 sm:p-8" : "pt-0"}`}
         >
           <div
@@ -1119,7 +1173,7 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
             onPointerDown={handleCanvasStart}
             onPointerMove={handleCanvasMove}
             onPointerUp={handleCanvasEnd}
-            onPointerLeave={handleCanvasEnd}
+            onPointerCancel={handleCanvasEnd}
             className="absolute inset-0 w-full h-full z-10 cursor-crosshair"
             style={{ touchAction: 'none' }}
           />
@@ -1191,7 +1245,7 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
     </div>
  
       {/* 3. RIGHT PANEL: WHITEBOARD CHIPS SQUAD ASSISTANT */}
-      {!isBoardFullscreen && (
+      {!isReadOnly && !isBoardFullscreen && (
         <div className="xl:col-span-1 space-y-4">
           
           {/* Rapid tokens spawning kit */}

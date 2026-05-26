@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Team, Player, Match, Training } from '../types';
+import { Team, Player, Match, Tactic } from '../types';
 import { DB } from '../db';
 import { 
-  Trophy, Users, Calendar, Clock, ThumbsUp, ThumbsDown, 
+  Trophy, Users, Calendar, Clock, ThumbsUp, ThumbsDown, Star, ChevronLeft, Maximize2,
   ChevronRight, Activity, Target, ShieldCheck, MapPin, Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import TacticalWhiteboard from './TacticalWhiteboard';
 
 interface PlayerDashboardProps {
   team: Team;
@@ -16,19 +17,22 @@ interface PlayerDashboardProps {
 export default function PlayerDashboard({ team, player, userId }: PlayerDashboardProps) {
   const [activeTab, setActiveTab] = useState<'stats' | 'matches' | 'trainings'>('stats');
   const [matches, setMatches] = useState<Match[]>([]);
-  const [trainings, setTrainings] = useState<Training[]>([]);
+  const [trainings, setTrainings] = useState<Tactic[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTactic, setSelectedTactic] = useState<Tactic | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [mList, tList] = await Promise.all([
+        const [mList, allTactics] = await Promise.all([
           DB.matches.list(team.id),
-          DB.trainings.list(team.id)
+          DB.tactics.list(team.id)
         ]);
         setMatches(mList.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setTrainings(tList.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        // Filter only tactics that are training sessions
+        const tList = allTactics.filter(t => t.type === 'training');
+        setTrainings(tList.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
       } catch (err) {
         console.error('Error fetching player dashboard data:', err);
       } finally {
@@ -38,27 +42,41 @@ export default function PlayerDashboard({ team, player, userId }: PlayerDashboar
     fetchData();
   }, [team.id]);
 
-  const handleVote = async (trainingId: string, vote: 'up' | 'down') => {
-    try {
-      await DB.trainings.vote(trainingId, userId, vote);
-      const updatedList = await DB.trainings.list(team.id);
-      setTrainings(updatedList.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    } catch (err) {
-      console.error('Error voting:', err);
-    }
-  };
-
-  const getVoteCounts = (training: Training) => {
-    const votes = training.votes || {};
-    const up = Object.values(votes).filter(v => v === 'up').length;
-    const down = Object.values(votes).filter(v => v === 'down').length;
-    return { up, down, myVote: votes[userId] };
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
+      </div>
+    );
+  }
+
+  if (selectedTactic) {
+    return (
+      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <button
+            onClick={() => setSelectedTactic(null)}
+            className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-300 hover:text-white transition-all bg-slate-800/40 border border-slate-700/60 px-5 py-3 rounded-2xl w-fit cursor-pointer hover:bg-slate-800"
+          >
+            <ChevronLeft className="w-4 h-4" /> Volver a Entrenamientos
+          </button>
+          
+          <div className="text-left sm:text-right">
+            <h2 className="text-base font-black text-indigo-400 uppercase tracking-wide">{selectedTactic.name}</h2>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
+              Fecha: {new Date(selectedTactic.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+        </div>
+        
+        <div className="bg-[#161b26] border border-slate-800 rounded-[2.5rem] p-6 shadow-2xl overflow-hidden relative">
+          <TacticalWhiteboard 
+            team={team} 
+            initialTacticId={selectedTactic.id} 
+            isReadOnly={true}
+            onExit={() => setSelectedTactic(null)}
+          />
+        </div>
       </div>
     );
   }
@@ -147,16 +165,16 @@ export default function PlayerDashboard({ team, player, userId }: PlayerDashboar
                   <Target className="w-5 h-5 text-indigo-400" />
                 </div>
                 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {[
-                    { label: 'Goles', value: player.stats.goals, color: 'text-emerald-400' },
-                    { label: 'Asistencias', value: player.stats.assists, color: 'text-blue-400' },
-                    { label: 'T. Amarillas', value: player.stats.yellowCards, color: 'text-amber-400' },
-                    { label: 'T. Rojas', value: player.stats.redCards, color: 'text-rose-400' }
+                    { label: 'Goles', value: player.stats.goals, color: 'text-emerald-400', bg: 'bg-[#10b981]/5 border-emerald-500/15' },
+                    { label: 'Asistencias', value: player.stats.assists, color: 'text-blue-400', bg: 'bg-[#3b82f6]/5 border-blue-500/15' },
+                    { label: 'T. Amarillas', value: player.stats.yellowCards, color: 'text-amber-400', bg: 'bg-[#f59e0b]/5 border-amber-500/15' },
+                    { label: 'T. Rojas', value: player.stats.redCards, color: 'text-rose-400', bg: 'bg-[#ef4444]/5 border-rose-500/15' }
                   ].map(s => (
-                    <div key={s.label} className="space-y-1">
-                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{s.label}</p>
-                      <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                    <div key={s.label} className={`rounded-2xl border p-4 text-center ${s.bg} flex flex-col justify-center gap-0.5 hover:scale-[1.02] transition-transform duration-300`}>
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider truncate mb-1">{s.label}</span>
+                      <span className={`text-4xl font-black tracking-tight ${s.color}`}>{s.value}</span>
                     </div>
                   ))}
                 </div>
@@ -293,76 +311,62 @@ export default function PlayerDashboard({ team, player, userId }: PlayerDashboar
                ) : (
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {trainings.map(training => {
-                      const { up, down, myVote } = getVoteCounts(training);
-
                       return (
-                        <div key={training.id} className="bg-[#161b26] border border-slate-800 rounded-[2rem] p-8 space-y-6 hover:border-indigo-500/40 transition-all flex flex-col group">
-                           <div className="flex items-start justify-between">
+                        <div key={training.id} className="bg-[#161b26] border border-slate-800 rounded-[2rem] p-8 space-y-6 hover:border-indigo-500/40 transition-all flex flex-col group relative overflow-hidden">
+                           <div className="flex items-start justify-between gap-4">
                               <div className="space-y-2">
                                 <div className="flex items-center gap-3">
                                   <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></div>
                                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                    {new Date(training.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                    {new Date(training.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
                                   </span>
                                 </div>
-                                <h4 className="text-xl font-black text-white group-hover:text-indigo-400 transition-colors uppercase italic">{training.title}</h4>
+                                <h4 className="text-xl font-black text-white group-hover:text-indigo-400 transition-colors uppercase italic leading-tight">{training.name}</h4>
                               </div>
-                              <span className="text-[9px] font-black uppercase tracking-widest px-3 py-1 bg-[#0b0e14] text-slate-400 rounded-lg border border-slate-800">
-                                {training.type}
-                              </span>
+                              
+                              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                <span className="text-[9px] font-black uppercase tracking-widest px-3 py-1 bg-[#0b0e14] text-indigo-400 rounded-lg border border-indigo-900/30">
+                                  Entrenamiento
+                                </span>
+                                <div className="flex text-amber-400 gap-0.5">
+                                  {[1, 2, 3, 4, 5].map(s => (
+                                    <Star key={s} className={`w-3 h-3 ${s <= (training.rating || 0) ? 'fill-current' : 'text-slate-800'}`} />
+                                  ))}
+                                </div>
+                              </div>
                            </div>
 
-                           <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">{training.description}</p>
+                           <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{training.description || 'Sin descripción detallada.'}</p>
 
-                           <div className="flex flex-wrap gap-2">
-                              {training.focusItems?.map(item => (
-                                <span key={item} className="text-[10px] font-bold text-indigo-300 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">{item}</span>
-                              ))}
-                           </div>
+                           {training.categories && training.categories.length > 0 && (
+                             <div className="flex flex-wrap gap-1.5">
+                                {training.categories.map(item => (
+                                  <span key={item} className="text-[10px] font-bold text-indigo-300 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20 capitalize">{item}</span>
+                                ))}
+                             </div>
+                           )}
 
                            <div className="pt-6 border-t border-white/5 flex items-center justify-between mt-auto">
-                              <div className="flex items-center gap-4">
-                                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
-                                   <Clock className="w-3.5 h-3.5" /> {training.duration} min
-                                 </div>
-                                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 capitalize">
-                                   <Activity className="w-3.5 h-3.5" /> Intensidad: {training.intensity}
-                                 </div>
+                              <div className="flex items-center gap-2 text-[10px] font-bold text-[#10b981] bg-[#10b981]/5 border border-[#10b981]/15 px-3 py-1 rounded-xl">
+                                <Activity className="w-3.5 h-3.5" /> Sesión táctica interactiva
                               </div>
 
-                              <div className="flex items-center gap-3 bg-[#0b0e14] p-1.5 rounded-2xl border border-slate-800">
-                                 <button 
-                                   onClick={() => handleVote(training.id, 'up')}
-                                   className={`p-2 rounded-xl transition-all flex items-center gap-2 ${
-                                     myVote === 'up' 
-                                       ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/20' 
-                                       : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/5'
-                                   }`}
-                                 >
-                                   <ThumbsUp className="w-4 h-4" />
-                                   <span className="text-[10px] font-black">{up}</span>
-                                 </button>
-                                 <button 
-                                   onClick={() => handleVote(training.id, 'down')}
-                                   className={`p-2 rounded-xl transition-all flex items-center gap-2 ${
-                                     myVote === 'down' 
-                                       ? 'bg-rose-500 text-white shadow-lg shadow-rose-900/20' 
-                                       : 'text-slate-500 hover:text-rose-400 hover:bg-rose-500/5'
-                                   }`}
-                                 >
-                                   <ThumbsDown className="w-4 h-4" />
-                                   <span className="text-[10px] font-black">{down}</span>
-                                 </button>
-                              </div>
+                              <button 
+                                onClick={() => setSelectedTactic(training)}
+                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-extrabold text-xs uppercase tracking-wider text-white transition-all shadow-lg shadow-indigo-900/40 cursor-pointer"
+                              >
+                                <Maximize2 className="w-3.5 h-3.5" />
+                                <span>Ver Pizarra Táctica</span>
+                              </button>
                            </div>
                         </div>
                       );
                     })}
-                 </div>
-               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  </div>
+                )}
+             </motion.div>
+           )}
+         </AnimatePresence>
       </div>
     </div>
   );

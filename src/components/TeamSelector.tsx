@@ -56,6 +56,7 @@ export default function TeamSelector({
         primaryColor: pColor,
         secondaryColor: sColor,
         createdAt: new Date().toISOString(),
+        accessCode: Math.floor(100000 + Math.random() * 900000).toString(),
         customStatsConfig: sport === 'football' ? [
           { id: 'saves', name: 'Paradas del Portero', category: 'performance', defaultValue: 0 },
           { id: 'fouls', name: 'Faltas Cometidas', category: 'discipline', defaultValue: 0 },
@@ -357,6 +358,14 @@ export default function TeamSelector({
                           <Users className="w-3.5 h-3.5 text-slate-500" /> Plantilla e Indicadores
                         </span>
                         <span className="font-semibold text-slate-300">Escalable</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-400">
+                        <span className="flex items-center gap-1 text-[11px]">
+                          <Settings2 className="w-3.5 h-3.5 text-indigo-500" /> Código de Acceso
+                        </span>
+                        <span className="font-mono text-xs font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          {team.accessCode || '123456'}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="flex items-center gap-1 text-[11px]">
