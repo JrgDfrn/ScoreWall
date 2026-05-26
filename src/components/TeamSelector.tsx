@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Team, SportType } from '../types';
-import { DB } from '../db';
+import { DB, generateUUID } from '../db';
 import { Shield, Waves, PlusCircle, Trash2, Calendar, Users, LogOut, Settings2, Info } from 'lucide-react';
 
 interface TeamSelectorProps {
@@ -49,7 +49,7 @@ export default function TeamSelector({
 
     try {
       const newTeam: Team = {
-        id: 'team-' + Date.now().toString(),
+        id: generateUUID(),
         userId,
         name: name.trim(),
         sport,

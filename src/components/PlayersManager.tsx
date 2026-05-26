@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Team, Player, CustomStatDefinition } from '../types';
-import { DB } from '../db';
+import { DB, generateUUID } from '../db';
 import { UserPlus, Star, BarChart3, Settings, Trash2, Edit2, Minus, Plus, Target, Trophy, Activity, UserCircle, Zap, ShieldAlert } from 'lucide-react';
 
 interface PlayersManagerProps {
@@ -68,7 +68,7 @@ export default function PlayersManager({ team, onTeamUpdated }: PlayersManagerPr
             notes: notes.trim()
           }
         : {
-            id: 'plr-' + Date.now().toString(),
+            id: generateUUID(),
             teamId: team.id,
             name: name.trim(),
             number,

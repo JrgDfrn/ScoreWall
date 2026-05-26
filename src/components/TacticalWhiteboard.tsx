@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Team, Player, Tactic, ChipState, LineDrawState } from '../types';
-import { DB } from '../db';
+import { DB, generateUUID } from '../db';
 import { Play, RotateCcw, Save, Trash2, Edit, ChevronRight, HelpCircle, Palette, Brush, Plus, PlayCircle, Maximize2, Minimize2, FolderOpen, FileText, Users, Eraser } from 'lucide-react';
 
 interface TacticalWhiteboardProps {
@@ -443,7 +443,7 @@ export default function TacticalWhiteboard({ team, initialTacticId, initialFulls
 
     try {
       const activeTactic: Tactic = {
-        id: selectedTacticId || 'tactic-' + Date.now().toString(),
+        id: selectedTacticId || generateUUID(),
         teamId: team.id,
         name: boardName.trim(),
         description: boardDesc.trim(),

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Team, Player, Match } from '../types';
-import { DB } from '../db';
+import { DB, generateUUID } from '../db';
 import { Calendar, MapPin, Trophy, ShieldAlert, Plus, CheckCircle, Clock, Trash2, Users, UserPlus, Check } from 'lucide-react';
 
 interface MatchesManagerProps {
@@ -64,7 +64,7 @@ export default function MatchesManager({ team }: MatchesManagerProps) {
 
     try {
       const newMatch: Match = {
-        id: 'match-' + Date.now().toString(),
+        id: generateUUID(),
         teamId: team.id,
         opponent: opponent.trim(),
         date,
